@@ -135,11 +135,14 @@ function ConsensusTab({ participants, responses }) {
   const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS))
   const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS))
   const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS))
+  const startingPoints = singleFieldConsensus(participants, responses, 'starting_city')
   return (
     <Card className="p-5">
       <ConsensusRow label="National or international" items={scope} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Kind of trip" items={places} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Starting point" items={startingPoints} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Travel time" items={travelTime} />
       <div className="h-px bg-neutral-100 my-4" />
