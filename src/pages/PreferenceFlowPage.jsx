@@ -268,14 +268,26 @@ function BudgetPhase({ form, set }) {
 }
 
 function DatesPhase({ form, set }) {
+  const minEnd = form.date_range_start > today ? form.date_range_start : today
+
+  function setStart(v) {
+    const clamped = v && v < today ? today : v
+    const patch = { date_range_start: clamped }
+    if (clamped && form.date_range_end && form.date_range_end < clamped) patch.date_range_end = clamped
+    set(patch)
+  }
+  function setEnd(v) {
+    set({ date_range_end: v && v < minEnd ? minEnd : v })
+  }
+
   return (
     <div className="space-y-6">
       <PhaseHeader title="When can everyone go, and for how long?" subtitle="Dates or weekends that work, and how many days you can spare." />
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Dates that work for you</div>
         <div className="flex gap-2">
-          <TextInput type="date" value={form.date_range_start} onChange={(v) => set({ date_range_start: v })} min={today} />
-          <TextInput type="date" value={form.date_range_end} onChange={(v) => set({ date_range_end: v })} min={form.date_range_start || today} />
+          <TextInput type="date" value={form.date_range_start} onChange={setStart} min={today} />
+          <TextInput type="date" value={form.date_range_end} onChange={setEnd} min={minEnd} />
         </div>
       </div>
       <div>
