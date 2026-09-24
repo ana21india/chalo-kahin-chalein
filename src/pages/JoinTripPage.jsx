@@ -5,6 +5,10 @@ import { Screen, Button, TextInput, Card } from '../components/ui'
 import { getStoredParticipant, storeParticipant } from '../lib/constants'
 import { getTrip, joinTrip } from '../lib/api'
 
+// This page is an explicit "join" entry point — it always shows the name
+// form, even if this browser already has a stored identity for the trip
+// (e.g. the coordinator adding several people from their own device).
+// Submitting overwrites this browser's stored identity with the new person.
 export default function JoinTripPage() {
   const { tripId } = useParams()
   const navigate = useNavigate()
@@ -15,16 +19,11 @@ export default function JoinTripPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
-    const stored = getStoredParticipant(tripId)
-    if (stored?.id) {
-      navigate(stored.isCoordinator ? `/trip/${tripId}/dashboard` : `/trip/${tripId}/status`, { replace: true })
-      return
-    }
     getTrip(tripId)
       .then(setTrip)
       .catch(() => setError("We couldn't find that trip."))
       .finally(() => setLoading(false))
-  }, [tripId, navigate])
+  }, [tripId])
 
   async function handleContinue() {
     if (!name.trim()) return
@@ -32,8 +31,16 @@ export default function JoinTripPage() {
     setError('')
     try {
       const participant = await joinTrip(tripId, name.trim())
-      storeParticipant(tripId, { id: participant.id, name: participant.name, isCoordinator: false })
-      navigate(`/trip/${tripId}/preferences`)
+      const existing = getStoredParticipant(tripId)
+      if (existing?.isCoordinator) {
+        // The coordinator is adding someone else from their own device —
+        // keep their own identity intact and let them fill in the new
+        // person's preferences on their behalf instead.
+        navigate(`/trip/${tripId}/preferences?as=${participant.id}`)
+      } else {
+        storeParticipant(tripId, { id: participant.id, name: participant.name, isCoordinator: false })
+        navigate(`/trip/${tripId}/preferences`)
+      }
     } catch (e) {
       console.error(e)
       setError('Something went wrong joining this trip. Try again.')

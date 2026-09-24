@@ -72,10 +72,16 @@ export default function CoordinatorDashboardPage() {
 
         <Card className="p-5">
           <div className="text-sm font-bold text-neutral-800 mb-1">Invite your group</div>
-          <p className="text-xs text-neutral-400 mb-3">Share this link with everyone going on the trip.</p>
+          <p className="text-xs text-neutral-400 mb-3">Share this link with everyone going on the trip — invite as many people as you want.</p>
           <button onClick={copyLink} className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-sunset-500 text-white text-sm font-semibold">
             <span className="truncate">{copied ? 'Copied!' : 'Copy invite link'}</span>
             {copied ? <Check size={16} /> : <Copy size={16} />}
+          </button>
+          <button
+            onClick={() => navigate(`/trip/${tripId}/join`)}
+            className="w-full mt-2 px-4 py-3 rounded-2xl border border-neutral-200 text-sm font-semibold text-neutral-700"
+          >
+            Add a person from this device
           </button>
         </Card>
 
