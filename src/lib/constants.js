@@ -1,5 +1,6 @@
 export const DESTINATION_TYPES = [
   'Beach', 'Mountains', 'City', 'Nature', 'Adventure', 'Cultural', 'Relaxation', 'Nightlife',
+  'National', 'International',
 ]
 
 export const ACTIVITIES = [
