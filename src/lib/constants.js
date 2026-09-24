@@ -4,6 +4,10 @@ export const TRIP_SCOPE_OPTIONS = [
   { value: 'either', label: 'Either works for me', hint: 'No strong preference' },
 ]
 
+export const TRIP_TYPE_OPTIONS = [
+  'Beach', 'Mountains', 'City', 'Parks & nature', 'Adventure', 'Relaxation',
+]
+
 export const MAJOR_CITIES = [
   'Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad',
   'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Kochi', 'Lucknow',

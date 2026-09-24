@@ -135,6 +135,23 @@ export function computeConflicts(participants, responsesByParticipant) {
     })
   }
 
+  // Destination-type conflict: beach vs mountains being the classic split.
+  const beachLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).some((t) => /beach/i.test(t)))
+  const mountainLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).some((t) => /mountain/i.test(t)))
+  const beachOnly = beachLovers.filter(({ participant }) => !mountainLovers.some(({ participant: p2 }) => p2.id === participant.id))
+  const mountainOnly = mountainLovers.filter(({ participant }) => !beachLovers.some(({ participant: p2 }) => p2.id === participant.id))
+  if (beachOnly.length > 0 && mountainOnly.length > 0) {
+    conflicts.push({
+      type: 'destination',
+      title: 'Destination-type split',
+      description: `${beachOnly.length} ${beachOnly.length === 1 ? 'person wants' : 'people want'} beaches, ${mountainOnly.length} ${mountainOnly.length === 1 ? 'person prefers' : 'people prefer'} mountains.`,
+      groups: [
+        { label: 'Beach', people: beachOnly.map(({ participant }) => participant.name) },
+        { label: 'Mountains', people: mountainOnly.map(({ participant }) => participant.name) },
+      ],
+    })
+  }
+
   // National vs international split.
   const wantsNational = entries.filter(({ response }) => response.trip_scope === 'national')
   const wantsIntl = entries.filter(({ response }) => response.trip_scope === 'international')
@@ -153,6 +170,19 @@ export function computeConflicts(participants, responsesByParticipant) {
   return conflicts
 }
 
+// Maps the trip-type option labels onto the destination catalog's own tags.
+function catalogTypeAliases(t) {
+  if (t === 'Parks & nature') return ['Nature']
+  return [t]
+}
+
+function overlapScore(selected = [], catalogTypes = []) {
+  if (!selected.length || !catalogTypes.length) return 0
+  const setB = new Set(catalogTypes)
+  const hits = selected.filter((x) => catalogTypeAliases(x).some((alias) => setB.has(alias))).length
+  return hits / selected.length
+}
+
 // Evaluates how a single destination fits one participant's response,
 // treating deal-breakers and the hard budget ceiling as constraints that a
 // majority preference cannot simply override.
@@ -161,9 +191,10 @@ export function fitForDestination(destination, response) {
   let level = 'green'
   let score = 0
 
-  if (!response.no_specific_destination && (response.specific_destinations || []).some((d) => d.toLowerCase().includes(destination.name.split(',')[0].toLowerCase()))) {
-    score += 5
-    reasons.push({ ok: true, text: 'This is a place you specifically asked for' })
+  if (!response.destination_no_pref) {
+    const s = overlapScore(response.destination_types, destination.types)
+    score += s * 3
+    if (s > 0) reasons.push({ ok: true, text: 'Matches the kind of place you want' })
   }
 
   if (response.trip_scope === 'international') {

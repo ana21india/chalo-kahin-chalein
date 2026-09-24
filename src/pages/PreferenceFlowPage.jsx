@@ -1,13 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Check, X, Plus } from 'lucide-react'
 import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../components/ui'
+import ChipSelect from '../components/ChipSelect'
 import {
-  TRIP_SCOPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
+  TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
 } from '../lib/constants'
-import { DESTINATIONS } from '../lib/destinations'
 import { getTrip, getResponse, upsertResponse } from '../lib/api'
 
 const STEPS = ['tripScope', 'destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
@@ -30,7 +30,7 @@ function sanitizeForm(form) {
 
 const emptyForm = {
   trip_scope: 'either',
-  specific_destinations: [], no_specific_destination: false,
+  destination_types: [], destination_no_pref: false,
   budget_ceiling: '', budget_includes_flights: 'whole_trip',
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '',
   starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit',
@@ -118,13 +118,18 @@ export default function PreferenceFlowPage() {
           <TripScopePhase value={form.trip_scope} onChange={(v) => set({ trip_scope: v })} />
         )}
         {current === 'destinationPick' && (
-          <DestinationPickPhase
-            scope={form.trip_scope}
-            values={form.specific_destinations}
-            noSpecific={form.no_specific_destination}
-            onValuesChange={(v) => set({ specific_destinations: v })}
-            onNoSpecificChange={(v) => set({ no_specific_destination: v, specific_destinations: v ? [] : form.specific_destinations })}
-          />
+          <div>
+            <PhaseHeader title="What kind of place do you want?" subtitle="Pick up to 2." />
+            <ChipSelect
+              options={TRIP_TYPE_OPTIONS}
+              selected={form.destination_types}
+              onChange={(v) => set({ destination_types: v })}
+              noPreference={form.destination_no_pref}
+              onNoPreferenceChange={(v) => set({ destination_no_pref: v, destination_types: v ? [] : form.destination_types })}
+              max={2}
+              allowCustom={false}
+            />
+          </div>
         )}
         {current === 'budget' && <BudgetPhase form={form} set={set} />}
         {current === 'datesAndDuration' && <DatesPhase form={form} set={set} />}
@@ -209,85 +214,6 @@ function TripScopePhase({ value, onChange }) {
           </button>
         ))}
       </div>
-    </div>
-  )
-}
-
-function DestinationPickPhase({ scope, values, noSpecific, onValuesChange, onNoSpecificChange }) {
-  const [input, setInput] = useState('')
-
-  const pool = useMemo(() => {
-    return DESTINATIONS.filter((d) => {
-      if (scope === 'national') return d.domestic
-      if (scope === 'international') return !d.domestic
-      return true
-    }).map((d) => d.name)
-  }, [scope])
-  const quickPicks = pool.slice(0, 8)
-
-  function add(name) {
-    const v = (name ?? input).trim()
-    if (!v || values.length >= 3 || noSpecific) return
-    if (!values.includes(v)) onValuesChange([...values, v])
-    if (!name) setInput('')
-  }
-  function remove(v) {
-    onValuesChange(values.filter((x) => x !== v))
-  }
-
-  return (
-    <div>
-      <PhaseHeader
-        title="Any places in mind?"
-        subtitle={
-          scope === 'national' ? 'Popular picks within India, based on what you just chose. Up to 3.'
-          : scope === 'international' ? 'Popular picks abroad, based on what you just chose. Up to 3.'
-          : 'Up to 3 places. Totally optional.'
-        }
-      />
-
-      <div className="flex flex-wrap gap-2 mb-3">
-        {values.map((v) => (
-          <span key={v} className="px-4 py-2.5 rounded-full text-sm font-medium bg-sunset-500 text-white flex items-center gap-1.5">
-            {v}
-            <button onClick={() => remove(v)}><X size={13} className="opacity-80" /></button>
-          </span>
-        ))}
-      </div>
-
-      {!noSpecific && values.length < 3 && quickPicks.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {quickPicks.filter((s) => !values.includes(s)).map((s) => (
-            <button
-              key={s}
-              onClick={() => add(s)}
-              className="px-3.5 py-2 rounded-full text-xs font-medium border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-400 flex items-center gap-1"
-            >
-              <Plus size={12} />{s}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {!noSpecific && values.length < 3 && (
-        <div className="flex gap-2 mb-4">
-          <div className="flex-1">
-            <AutocompleteInput value={input} onChange={setInput} options={pool} placeholder="Or type your own" onCommit={() => add()} />
-          </div>
-          <button onClick={() => add()} className="px-4 py-2 bg-sunset-500 text-white rounded-2xl text-sm font-semibold flex items-center gap-1 self-start"><Plus size={14} />Add</button>
-        </div>
-      )}
-
-      <button
-        onClick={() => onNoSpecificChange(!noSpecific)}
-        className={`w-full text-left px-4 py-3 rounded-2xl text-sm font-medium border transition-colors flex items-center gap-2
-          ${noSpecific ? 'bg-lagoon-50 border-lagoon-300 text-lagoon-700' : 'bg-neutral-50 border-neutral-200 text-neutral-500'}`}
-      >
-        <span className={`w-4 h-4 rounded-full border flex items-center justify-center ${noSpecific ? 'bg-lagoon-500 border-lagoon-500' : 'border-neutral-300'}`}>
-          {noSpecific && <Check size={11} className="text-white" />}
-        </span>
-        I don't have a specific destination in mind
-      </button>
     </div>
   )
 }
@@ -517,8 +443,8 @@ function ReviewPhase({ form, onEdit }) {
           {scopeLabel || 'Not set'}
         </ReviewCard>
 
-        <ReviewCard title="Places in mind" onEdit={() => onEdit(STEPS.indexOf('destinationPick'))}>
-          {form.no_specific_destination ? 'No specific destination' : (form.specific_destinations.join(', ') || 'Nothing added')}
+        <ReviewCard title="Kind of trip" onEdit={() => onEdit(STEPS.indexOf('destinationPick'))}>
+          {form.destination_no_pref ? 'No preference' : (form.destination_types.join(', ') || 'Nothing selected')}
         </ReviewCard>
 
         <ReviewCard title="Budget" onEdit={() => onEdit(STEPS.indexOf('budget'))}>
