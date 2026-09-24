@@ -274,6 +274,8 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
   const entries = completedResponses(participants, responsesByParticipant)
   if (entries.length === 0) return []
 
+  const ALIGNMENT_RANK = { 'Strong alignment': 0, 'Partial alignment': 1, 'Alignment with open conflicts': 2 }
+
   const scored = DESTINATIONS.map((destination) => {
     const fits = entries.map(({ participant, response }) => ({
       participant,
@@ -282,11 +284,16 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     const groupScore = fits.reduce((sum, f) => sum + f.score, 0) / fits.length
     const reds = fits.filter((f) => f.level === 'red').length
     const greens = fits.filter((f) => f.level === 'green').length
-    return { destination, fits, groupScore, reds, greens }
+    const summary = buildOptionSummary({ destination, fits, reds, greens })
+    return { destination, fits, groupScore, reds, greens, summary }
   })
 
+  // Rank by alignment tier first (Strong > Partial > has open conflicts) so
+  // the displayed order always matches the label shown on each card, then by
+  // raw score within a tier.
   scored.sort((a, b) => {
-    if (a.reds !== b.reds) return a.reds - b.reds
+    const tierDiff = ALIGNMENT_RANK[a.summary.alignment] - ALIGNMENT_RANK[b.summary.alignment]
+    if (tierDiff !== 0) return tierDiff
     return b.groupScore - a.groupScore
   })
 
@@ -306,7 +313,7 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     chosen.push(next)
   }
 
-  return chosen.map((c) => buildOptionSummary(c))
+  return chosen.map((c) => c.summary)
 }
 
 function buildOptionSummary({ destination, fits, reds, greens }) {
