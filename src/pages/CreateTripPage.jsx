@@ -4,11 +4,12 @@ import { Screen, TopBar, Button, TextInput, Card } from '../components/ui'
 import { DURATION_OPTIONS, DATES_TYPE_OPTIONS, storeParticipant } from '../lib/constants'
 import { createTrip } from '../lib/api'
 
+const today = new Date().toISOString().slice(0, 10)
+
 export default function CreateTripPage() {
   const navigate = useNavigate()
   const [coordinatorName, setCoordinatorName] = useState('')
   const [tripName, setTripName] = useState('')
-  const [initialDestination, setInitialDestination] = useState('')
   const [datesType, setDatesType] = useState('flexible')
   const [dateStart, setDateStart] = useState('')
   const [dateEnd, setDateEnd] = useState('')
@@ -27,7 +28,6 @@ export default function CreateTripPage() {
       const { trip, participant } = await createTrip({
         coordinatorName: coordinatorName.trim(),
         tripName: tripName.trim(),
-        initialDestination: initialDestination.trim(),
         datesType,
         dateStart,
         dateEnd,
@@ -55,10 +55,6 @@ export default function CreateTripPage() {
           <TextInput value={tripName} onChange={setTripName} placeholder="Trip name" />
         </Field>
 
-        <Field label="Where are you thinking of going?" hint="Optional — just a starting point, not the final call.">
-          <TextInput value={initialDestination} onChange={setInitialDestination} placeholder="e.g. Goa, Bali, Anywhere, Not decided" />
-        </Field>
-
         <Field label="Approximate dates">
           <div className="grid grid-cols-2 gap-2">
             {DATES_TYPE_OPTIONS.map((opt) => (
@@ -73,8 +69,8 @@ export default function CreateTripPage() {
           </div>
           {datesType === 'specific' || datesType === 'range' ? (
             <div className="flex gap-2 mt-3">
-              <TextInput type="date" value={dateStart} onChange={setDateStart} />
-              <TextInput type="date" value={dateEnd} onChange={setDateEnd} />
+              <TextInput type="date" value={dateStart} onChange={setDateStart} min={today} />
+              <TextInput type="date" value={dateEnd} onChange={setDateEnd} min={dateStart || today} />
             </div>
           ) : null}
           {datesType === 'month' ? (

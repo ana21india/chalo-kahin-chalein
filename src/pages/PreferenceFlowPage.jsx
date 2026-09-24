@@ -2,16 +2,16 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Check, X, Plus } from 'lucide-react'
 import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../components/ui'
-import ChipSelect from '../components/ChipSelect'
 import {
-  TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS_BY_SCOPE, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
+  TRIP_SCOPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
 } from '../lib/constants'
 import { DESTINATIONS } from '../lib/destinations'
 import { getTrip, getResponse, upsertResponse } from '../lib/api'
 
-const STEPS = ['tripScope', 'destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'tripType', 'paceAndStay', 'dealbreakers', 'review']
+const STEPS = ['tripScope', 'destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
+const today = new Date().toISOString().slice(0, 10)
 
 const INTEGER_FIELDS = ['budget_ceiling', 'min_days', 'max_days']
 const DATE_FIELDS = ['date_range_start', 'date_range_end']
@@ -34,7 +34,6 @@ const emptyForm = {
   budget_ceiling: '', budget_includes_flights: 'whole_trip',
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '',
   starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit',
-  destination_types: [], destination_no_pref: false,
   pace: '', stay_type: '', room_sharing: '',
   dealbreakers: [], no_dealbreakers: false,
 }
@@ -120,7 +119,6 @@ export default function PreferenceFlowPage() {
         )}
         {current === 'destinationPick' && (
           <DestinationPickPhase
-            trip={trip}
             scope={form.trip_scope}
             values={form.specific_destinations}
             noSpecific={form.no_specific_destination}
@@ -131,23 +129,6 @@ export default function PreferenceFlowPage() {
         {current === 'budget' && <BudgetPhase form={form} set={set} />}
         {current === 'datesAndDuration' && <DatesPhase form={form} set={set} />}
         {current === 'startingPoint' && <StartingPointPhase form={form} set={set} />}
-        {current === 'tripType' && (
-          <div>
-            <PhaseHeader
-              title="What kind of trip is it?"
-              subtitle={form.trip_scope === 'either' ? 'Pick up to 2.' : `Options for a ${form.trip_scope} trip. Pick up to 2.`}
-            />
-            <ChipSelect
-              options={TRIP_TYPE_OPTIONS_BY_SCOPE[form.trip_scope] || TRIP_TYPE_OPTIONS_BY_SCOPE.either}
-              selected={form.destination_types}
-              onChange={(v) => set({ destination_types: v })}
-              noPreference={form.destination_no_pref}
-              onNoPreferenceChange={(v) => set({ destination_no_pref: v, destination_types: v ? [] : form.destination_types })}
-              max={2}
-              allowCustom={false}
-            />
-          </div>
-        )}
         {current === 'paceAndStay' && <PaceAndStayPhase form={form} set={set} />}
         {current === 'dealbreakers' && <DealbreakersPhase form={form} set={set} />}
         {current === 'review' && <ReviewPhase form={form} onEdit={(i) => setStep(i)} />}
@@ -177,6 +158,40 @@ function PhaseHeader({ title, subtitle }) {
   )
 }
 
+function AutocompleteInput({ value, onChange, options, placeholder, onCommit }) {
+  const [open, setOpen] = useState(false)
+  const filtered = options
+    .filter((o) => o.toLowerCase() !== (value || '').toLowerCase())
+    .filter((o) => !value || o.toLowerCase().includes(value.toLowerCase()))
+    .slice(0, 6)
+
+  return (
+    <div className="relative">
+      <TextInput
+        value={value}
+        onChange={(v) => { onChange(v); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onKeyDown={(e) => e.key === 'Enter' && onCommit && onCommit()}
+        placeholder={placeholder}
+      />
+      {open && filtered.length > 0 && (
+        <div className="absolute z-10 mt-1.5 w-full bg-white border border-neutral-200 rounded-2xl shadow-soft overflow-hidden max-h-56 overflow-y-auto">
+          {filtered.map((o) => (
+            <button
+              key={o}
+              onMouseDown={() => { onChange(o); setOpen(false) }}
+              className="w-full text-left px-4 py-2.5 text-sm text-neutral-700 hover:bg-neutral-50"
+            >
+              {o}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function TripScopePhase({ value, onChange }) {
   return (
     <div>
@@ -198,17 +213,17 @@ function TripScopePhase({ value, onChange }) {
   )
 }
 
-function DestinationPickPhase({ trip, scope, values, noSpecific, onValuesChange, onNoSpecificChange }) {
+function DestinationPickPhase({ scope, values, noSpecific, onValuesChange, onNoSpecificChange }) {
   const [input, setInput] = useState('')
 
-  const suggestions = useMemo(() => {
-    const pool = DESTINATIONS.filter((d) => {
+  const pool = useMemo(() => {
+    return DESTINATIONS.filter((d) => {
       if (scope === 'national') return d.domestic
       if (scope === 'international') return !d.domestic
       return true
-    })
-    return pool.slice(0, 10).map((d) => d.name)
+    }).map((d) => d.name)
   }, [scope])
+  const quickPicks = pool.slice(0, 8)
 
   function add(name) {
     const v = (name ?? input).trim()
@@ -231,20 +246,6 @@ function DestinationPickPhase({ trip, scope, values, noSpecific, onValuesChange,
         }
       />
 
-      {trip?.initial_destination && trip.initial_destination.toLowerCase() !== 'not decided yet' && (
-        <Card className="p-4 mb-4 bg-sunset-50 border-sunset-100">
-          <p className="text-sm text-neutral-700">
-            Your coordinator suggested <span className="font-bold">{trip.initial_destination}</span>.
-          </p>
-          <button
-            onClick={() => add(trip.initial_destination)}
-            className="mt-2 text-xs font-semibold text-sunset-600"
-          >
-            + Add it to my list
-          </button>
-        </Card>
-      )}
-
       <div className="flex flex-wrap gap-2 mb-3">
         {values.map((v) => (
           <span key={v} className="px-4 py-2.5 rounded-full text-sm font-medium bg-sunset-500 text-white flex items-center gap-1.5">
@@ -254,9 +255,9 @@ function DestinationPickPhase({ trip, scope, values, noSpecific, onValuesChange,
         ))}
       </div>
 
-      {!noSpecific && values.length < 3 && suggestions.length > 0 && (
+      {!noSpecific && values.length < 3 && quickPicks.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-3">
-          {suggestions.filter((s) => !values.includes(s)).map((s) => (
+          {quickPicks.filter((s) => !values.includes(s)).map((s) => (
             <button
               key={s}
               onClick={() => add(s)}
@@ -270,8 +271,10 @@ function DestinationPickPhase({ trip, scope, values, noSpecific, onValuesChange,
 
       {!noSpecific && values.length < 3 && (
         <div className="flex gap-2 mb-4">
-          <TextInput value={input} onChange={setInput} placeholder="Or type your own" onKeyDown={(e) => e.key === 'Enter' && add()} />
-          <button onClick={() => add()} className="px-4 py-2 bg-sunset-500 text-white rounded-2xl text-sm font-semibold flex items-center gap-1"><Plus size={14} />Add</button>
+          <div className="flex-1">
+            <AutocompleteInput value={input} onChange={setInput} options={pool} placeholder="Or type your own" onCommit={() => add()} />
+          </div>
+          <button onClick={() => add()} className="px-4 py-2 bg-sunset-500 text-white rounded-2xl text-sm font-semibold flex items-center gap-1 self-start"><Plus size={14} />Add</button>
         </div>
       )}
 
@@ -322,8 +325,8 @@ function DatesPhase({ form, set }) {
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Dates that work for you</div>
         <div className="flex gap-2">
-          <TextInput type="date" value={form.date_range_start} onChange={(v) => set({ date_range_start: v })} />
-          <TextInput type="date" value={form.date_range_end} onChange={(v) => set({ date_range_end: v })} />
+          <TextInput type="date" value={form.date_range_start} onChange={(v) => set({ date_range_start: v })} min={today} />
+          <TextInput type="date" value={form.date_range_end} onChange={(v) => set({ date_range_end: v })} min={form.date_range_start || today} />
         </div>
       </div>
       <div>
@@ -358,18 +361,12 @@ function StartingPointPhase({ form, set }) {
       <PhaseHeader title="Where are you starting from?" subtitle="Your city, and how far/how you're willing to travel." />
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Your city</div>
-        <TextInput value={form.starting_city} onChange={(v) => set({ starting_city: v })} placeholder="e.g. Bengaluru" />
-        <div className="flex flex-wrap gap-2 mt-3">
-          {MAJOR_CITIES.filter((c) => c !== form.starting_city).map((c) => (
-            <button
-              key={c}
-              onClick={() => set({ starting_city: c })}
-              className="px-3.5 py-2 rounded-full text-xs font-medium border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-400"
-            >
-              {c}
-            </button>
-          ))}
-        </div>
+        <AutocompleteInput
+          value={form.starting_city}
+          onChange={(v) => set({ starting_city: v })}
+          options={MAJOR_CITIES}
+          placeholder="e.g. Bengaluru"
+        />
       </div>
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2.5">Preferred travel mode</div>
@@ -535,10 +532,6 @@ function ReviewPhase({ form, onEdit }) {
 
         <ReviewCard title="Starting point" onEdit={() => onEdit(STEPS.indexOf('startingPoint'))}>
           {form.starting_city || 'City not set'} · {form.travel_mode} · {TRAVEL_TIME_OPTIONS.find((o) => o.value === form.travel_time_max)?.label}
-        </ReviewCard>
-
-        <ReviewCard title="Kind of trip" onEdit={() => onEdit(STEPS.indexOf('tripType'))}>
-          {form.destination_no_pref ? 'No preference' : (form.destination_types.join(', ') || 'Nothing selected')}
         </ReviewCard>
 
         <ReviewCard title="Pace & stay" onEdit={() => onEdit(STEPS.indexOf('paceAndStay'))}>

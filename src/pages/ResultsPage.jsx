@@ -129,7 +129,7 @@ function ConsensusRow({ label, items }) {
 
 function ConsensusTab({ participants, responses }) {
   const scope = singleFieldConsensus(participants, responses, 'trip_scope', labelMapFrom(TRIP_SCOPE_OPTIONS))
-  const destination = groupConsensus(participants, responses, 'destination_types', 'destination_no_pref')
+  const places = groupConsensus(participants, responses, 'specific_destinations', 'no_specific_destination')
   const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS))
   const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS))
   const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS))
@@ -137,7 +137,7 @@ function ConsensusTab({ participants, responses }) {
     <Card className="p-5">
       <ConsensusRow label="National or international" items={scope} />
       <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Kind of trip" items={destination} />
+      <ConsensusRow label="Places in mind" items={places} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Pace" items={pace} />
       <div className="h-px bg-neutral-100 my-4" />
