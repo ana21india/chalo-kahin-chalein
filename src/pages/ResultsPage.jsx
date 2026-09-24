@@ -44,7 +44,8 @@ export default function ResultsPage() {
   }, [tripId])
 
   const counts = useMemo(() => completionCounts(participants, responses), [participants, responses])
-  const options = useMemo(() => generateOptions(participants, responses, 3), [participants, responses])
+  const optionsResult = useMemo(() => generateOptions(participants, responses, 3), [participants, responses])
+  const options = optionsResult.options
   const conflicts = useMemo(() => computeConflicts(participants, responses), [participants, responses])
 
   if (!trip) {
@@ -83,7 +84,7 @@ export default function ResultsPage() {
       <div className="flex-1 px-5 py-4 overflow-y-auto pb-10 space-y-4">
         {tab === 'Consensus' && <ConsensusTab participants={participants} responses={responses} />}
         {tab === 'Conflicts' && <ConflictsTab conflicts={conflicts} />}
-        {tab === 'Options' && <OptionsTab options={options} counts={counts} />}
+        {tab === 'Options' && <OptionsTab optionsResult={optionsResult} counts={counts} />}
         {tab === 'Decide' && (
           <DecideTab
             tripId={tripId}
@@ -180,14 +181,29 @@ function ConflictsTab({ conflicts }) {
   )
 }
 
-function OptionsTab({ options, counts }) {
+function OptionsTab({ optionsResult, counts }) {
+  const { dateConflict, message, options } = optionsResult
   const [expanded, setExpanded] = useState(options[0]?.name || null)
+
+  if (dateConflict) {
+    return (
+      <Card className="p-5">
+        <div className="flex items-center gap-2 mb-2">
+          <AlertTriangle size={16} className="text-amber-500" />
+          <span className="font-bold text-neutral-900 text-sm">No common travel window yet</span>
+        </div>
+        <p className="text-sm text-neutral-600">{message}</p>
+      </Card>
+    )
+  }
   if (options.length === 0) {
     return <Card className="p-5"><p className="text-sm text-neutral-400">Not enough data yet to generate options.</p></Card>
   }
+  const primary = options.filter((o) => !o.isWildcard)
+  const wildcards = options.filter((o) => o.isWildcard)
   return (
     <div className="space-y-3">
-      <p className="text-xs text-neutral-400">Your group is down to {options.length} option{options.length > 1 ? 's' : ''}. Based on {counts.completed} of {counts.total} responses.</p>
+      <p className="text-xs text-neutral-400">Your group is down to {primary.length} option{primary.length > 1 ? 's' : ''}{wildcards.length ? ' + 1 wildcard' : ''}. Based on {counts.completed} of {counts.total} responses.</p>
       {options.map((opt) => (
         <OptionCard key={opt.name} option={opt} isOpen={expanded === opt.name} onToggle={() => setExpanded(expanded === opt.name ? null : opt.name)} />
       ))}
@@ -207,7 +223,10 @@ function OptionCard({ option, isOpen, onToggle }) {
     <Card className="p-5">
       <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
         <div>
-          <div className="font-extrabold text-lg text-neutral-900">{option.name}</div>
+          <div className="font-extrabold text-lg text-neutral-900 flex items-center gap-2">
+            {option.name}
+            {option.isWildcard && <Pill tone="lagoon">Wildcard</Pill>}
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <Pill tone={alignmentTone(option.alignment)}>{option.alignment}</Pill>
             <span className="text-xs font-bold text-neutral-400">{option.groupFitScore}/100</span>

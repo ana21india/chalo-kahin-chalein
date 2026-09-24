@@ -173,69 +173,81 @@ export function computeConflicts(participants, responsesByParticipant) {
 // ---------------------------------------------------------------------------
 // Destination recommendation engine
 //
-// Methodology (deliberately not a keyword-match score):
-// 1. Hard constraints (budget, national/international, travel time, trip
-//    duration, dealbreakers) can never be bought back by a high preference
-//    score — a destination that fails one is marked blocked for that person.
-// 2. Soft preferences (kind of place, pace, stay, room sharing, travel mode)
-//    are scored on a 0-1 "fit" scale per person, using each destination's
-//    real profile — not a binary tag match.
-// 3. Different travellers with different picks aren't assumed to conflict:
-//    axes are mapped onto broader experience clusters (see
-//    EXPERIENCE_CLUSTERS in destinations.js) so a destination strong on
-//    both "Mountains" and "Parks & nature" can genuinely satisfy someone
-//    who picked one and someone who picked the other.
-// 4. Destinations are scored 0-100: preference fit (35) + group
-//    compatibility (20, rewarding destinations that work reasonably for
-//    everyone, not just on average) + budget (15) + travel time (10) +
-//    duration (5) + pace (5) + stay (5) + travel mode (5).
-// 5. Every shortlisted destination gets a full explanation: why it works
-//    for each traveller individually, what shared experience it offers,
-//    and its practical fit — grounded in that destination's own data.
+// Sequence: identify true hard constraints → compute the group's common
+// date window (a global gate, not a per-destination penalty) → remove
+// destinations failing hard constraints → read the group's national/
+// international consensus → build a primary pool (matches the majority
+// direction) and a wildcard pool (matches the minority, only if it clears
+// its own bar) → score every surviving destination on preference fit,
+// group compatibility/fairness, and practical fit → explain every result
+// in terms of what each traveller actually asked for.
+//
+// TRUE hard constraints (eliminate outright, never bought back by a high
+// preference score): the group's common date window, budget only when
+// "Exceeds my budget" is an explicit dealbreaker, a stated maximum travel
+// time, and any other explicit dealbreaker. National/international is
+// deliberately NOT a per-person hard constraint — it's a group consensus
+// signal that splits candidates into primary vs. wildcard pools instead.
 // ---------------------------------------------------------------------------
 
-// Hard constraints: if any of these fail, the destination cannot work for
-// this person, full stop — no preference score can compensate.
+function clamp01(n) {
+  return Math.max(0, Math.min(1, n))
+}
+
+function flexDays(flexibility) {
+  switch (flexibility) {
+    case 'flexible': return 3
+    case 'very_flexible': return 10
+    default: return 0
+  }
+}
+
+// A person's acceptable travel window, expanded by their stated flexibility.
+// Returns null if they didn't specify dates at all — someone who left dates
+// blank places no constraint on the group's common window.
+function personDateWindow(response) {
+  if (!response.date_range_start && !response.date_range_end) return null
+  const start = response.date_range_start ? new Date(response.date_range_start) : new Date(response.date_range_end)
+  const end = response.date_range_end ? new Date(response.date_range_end) : new Date(response.date_range_start)
+  const pad = flexDays(response.date_flexibility) * 24 * 60 * 60 * 1000
+  return { start: new Date(start.getTime() - pad), end: new Date(end.getTime() + pad) }
+}
+
+// True hard constraint: dates are a group-level gate, computed once before
+// any destination is even considered. It either fits everyone or it doesn't
+// — a destination is never scored lower for a date mismatch, because if
+// there's no common window, there's nothing to recommend at all yet.
+function commonDateWindow(entries) {
+  const windows = entries.map(({ response }) => personDateWindow(response)).filter(Boolean)
+  if (windows.length === 0) return { exists: true }
+  const start = new Date(Math.max(...windows.map((w) => w.start.getTime())))
+  const end = new Date(Math.min(...windows.map((w) => w.end.getTime())))
+  return { exists: start <= end, start, end }
+}
+
+// Hard constraints that eliminate a destination for one person — never
+// compensated for by a high preference score elsewhere.
 function hardConstraintCheck(destination, response) {
   const reasons = []
   let blocked = false
 
-  if (response.trip_scope === 'international' && destination.domestic) {
-    blocked = true
-    reasons.push('You wanted an international trip — this is domestic')
-  } else if (response.trip_scope === 'national' && !destination.domestic) {
-    blocked = true
-    reasons.push('You wanted a national trip — this is international')
-  }
-
-  const ceiling = response.budget_ceiling
-  if (ceiling && destination.budgetMin > ceiling) {
-    blocked = true
-    reasons.push(`Exceeds your maximum budget (₹${ceiling.toLocaleString('en-IN')})`)
-  }
-
-  const maxHours = travelTimeMaxHours(response.travel_time_max)
-  if (destination.travelTimeHours > maxHours) {
-    blocked = true
-    reasons.push('Travel time is longer than your stated limit')
-  }
-
-  if (response.min_days && destination.recommendedDuration.max < response.min_days) {
-    blocked = true
-    reasons.push(`Needs more days than this trip usually takes (you need at least ${response.min_days})`)
-  }
-  if (response.max_days && destination.recommendedDuration.min > response.max_days) {
-    blocked = true
-    reasons.push(`Usually needs more days than you can spare (max ${response.max_days})`)
-  }
-
   const dbs = response.no_dealbreakers ? [] : (response.dealbreakers || [])
-  for (const db of dbs) {
-    if (db === 'Exceeds my budget' && ceiling && destination.budgetMin > ceiling) {
+  const ceiling = response.budget_ceiling
+  if (dbs.includes('Exceeds my budget') && ceiling && destination.budgetMin > ceiling) {
+    blocked = true
+    reasons.push(`Dealbreaker: exceeds your budget (₹${ceiling.toLocaleString('en-IN')})`)
+  }
+
+  if (response.travel_time_max && response.travel_time_max !== 'no_limit') {
+    const maxHours = travelTimeMaxHours(response.travel_time_max)
+    if (destination.travelTimeHours > maxHours) {
       blocked = true
-      reasons.push('Dealbreaker: exceeds your budget')
+      reasons.push('Travel time is longer than your stated maximum')
     }
-    if (db === 'No long drives' && destination.travelModes.includes('Road') && destination.travelModes.length === 1 && destination.travelTimeHours > 6) {
+  }
+
+  for (const db of dbs) {
+    if (db === 'No long drives' && destination.travelModes.length === 1 && destination.travelModes[0] === 'Road' && destination.travelTimeHours > 6) {
       blocked = true
       reasons.push('Dealbreaker: this is a long drive')
     }
@@ -248,12 +260,7 @@ function hardConstraintCheck(destination, response) {
   return { blocked, reasons }
 }
 
-function clamp01(n) {
-  return Math.max(0, Math.min(1, n))
-}
-
-// Soft-preference fit scores, each 0-1. Computed only for destinations that
-// already passed the hard-constraint check for this person.
+// Soft-preference fit scores, each 0-1 — scored, never eliminating.
 function computeFitDetails(destination, response) {
   let preferenceFit = 1
   if (!response.destination_no_pref && (response.destination_types || []).length > 0) {
@@ -265,11 +272,13 @@ function computeFitDetails(destination, response) {
   if (response.budget_ceiling) {
     const range = destination.budgetMax - destination.budgetMin || 1
     budgetFit = clamp01((response.budget_ceiling - destination.budgetMin) / range)
-    budgetFit = 0.5 + budgetFit * 0.5 // already survived the hard filter, so floor at 0.5
   }
 
-  const maxHours = travelTimeMaxHours(response.travel_time_max)
-  const travelFit = maxHours === Infinity ? 1 : clamp01(1 - (destination.travelTimeHours / maxHours) * 0.4)
+  let travelFit = 1
+  if (response.travel_time_max && response.travel_time_max !== 'no_limit') {
+    const maxHours = travelTimeMaxHours(response.travel_time_max)
+    travelFit = clamp01(1 - (destination.travelTimeHours / maxHours) * 0.4)
+  }
 
   let durationFit = 1
   if (response.min_days || response.max_days) {
@@ -277,7 +286,7 @@ function computeFitDetails(destination, response) {
     const hi = response.max_days || destination.recommendedDuration.max
     const overlapLo = Math.max(lo, destination.recommendedDuration.min)
     const overlapHi = Math.min(hi, destination.recommendedDuration.max)
-    durationFit = overlapHi >= overlapLo ? 1 : 0.6
+    durationFit = overlapHi >= overlapLo ? 1 : 0.5
   }
 
   let paceFit = 1
@@ -299,8 +308,11 @@ function computeFitDetails(destination, response) {
   return { preferenceFit, budgetFit, travelFit, durationFit, paceFit, stayFit, travelModeFit }
 }
 
-// Full per-person evaluation: hard-constraint check + soft-preference fit,
-// reduced to the {level, reasons} shape the person-level fit UI expects.
+// Full per-person evaluation, reduced to the {level, reasons} shape the
+// person-level fit UI expects. Only surfaces negatives for things the
+// person actually specified (their budget, their travel limit, their
+// pace/stay choice, their selected axes) — never for axes they never
+// picked in the first place.
 export function fitForDestination(destination, response) {
   const hc = hardConstraintCheck(destination, response)
   const details = computeFitDetails(destination, response)
@@ -315,16 +327,16 @@ export function fitForDestination(destination, response) {
       const strength = destination.profile[axis] ?? 0.3
       if (strength >= 0.6) {
         reasons.push({ ok: true, text: `${axis} → ${destination.highlights?.[axis] || `matches ${destination.name}'s profile`}` })
-      } else if (strength <= 0.3) {
-        reasons.push({ ok: 'warn', text: `${axis} isn't really what ${destination.name} is known for` })
       }
     }
   }
-  if (details.budgetFit >= 0.85 && !hc.blocked) reasons.push({ ok: true, text: 'Comfortably within your budget' })
-  else if (details.budgetFit < 0.65 && !hc.blocked) reasons.push({ ok: 'warn', text: 'Close to your maximum budget' })
-  if (details.travelFit < 0.7) reasons.push({ ok: 'warn', text: 'Longer travel than you’d ideally want' })
-  if (details.paceFit < 0.6) reasons.push({ ok: 'warn', text: `This place tends to run ${destination.typicalPace}-paced, not ${response.pace}` })
-  if (details.stayFit < 0.6) reasons.push({ ok: 'warn', text: `Not many ${response.stay_type === 'hotel' ? 'hotel' : 'rental'} options here` })
+  if (!hc.blocked && details.budgetFit >= 0.7) reasons.push({ ok: true, text: 'Comfortably within your budget' })
+  else if (!hc.blocked && response.budget_ceiling && details.budgetFit < 0.4) reasons.push({ ok: 'warn', text: 'Above your comfortable budget, though not your stated dealbreaker' })
+  if (response.travel_time_max && response.travel_time_max !== 'no_limit' && details.travelFit < 0.7) {
+    reasons.push({ ok: 'warn', text: 'Longer travel than you’d ideally want' })
+  }
+  if (response.pace && details.paceFit < 0.6) reasons.push({ ok: 'warn', text: `This place tends to run ${destination.typicalPace}-paced, not ${response.pace}` })
+  if (response.stay_type && details.stayFit < 0.6) reasons.push({ ok: 'warn', text: `Not many ${response.stay_type === 'hotel' ? 'hotel' : 'rental'} options here` })
 
   if (reasons.length === 0) reasons.push({ ok: 'warn', text: 'No strong signal either way' })
 
@@ -346,65 +358,125 @@ function personClusters(response) {
   return clusters
 }
 
-// Produces 2-3 viable destinations with full group scoring and explanations.
+function scoreDestination(destination, entries) {
+  const fits = entries.map(({ participant, response }) => ({
+    participant,
+    response,
+    ...fitForDestination(destination, response),
+  }))
+
+  const preferenceFits = fits.map((f) => f.details.preferenceFit)
+  const avgPreferenceFit = preferenceFits.reduce((a, b) => a + b, 0) / preferenceFits.length
+  const minPreferenceFit = Math.min(...preferenceFits)
+  const groupCompatibility = 0.7 * avgPreferenceFit + 0.3 * minPreferenceFit
+
+  const avg = (key) => fits.reduce((sum, f) => sum + f.details[key], 0) / fits.length
+
+  const score100 =
+    avgPreferenceFit * 35 +
+    groupCompatibility * 20 +
+    avg('budgetFit') * 15 +
+    avg('travelFit') * 10 +
+    avg('durationFit') * 5 +
+    avg('paceFit') * 5 +
+    avg('stayFit') * 5 +
+    avg('travelModeFit') * 5
+
+  const reds = fits.filter((f) => f.blocked).length
+  const primaryAxis = Object.entries(destination.profile).sort((a, b) => b[1] - a[1])[0][0]
+
+  return { destination, fits, reds, score100, avgPreferenceFit, minPreferenceFit, groupCompatibility, primaryAxis }
+}
+
+// Group's national/international consensus. Excludes people who said
+// "either" from the denominator — they don't push the group either way,
+// but they don't get counted against a direction either.
+function scopeConsensus(entries) {
+  const national = entries.filter(({ response }) => response.trip_scope === 'national').length
+  const international = entries.filter(({ response }) => response.trip_scope === 'international').length
+  const total = national + international
+  if (total === 0) return { direction: null, minority: null, majorityPct: 0 }
+  const nationalPct = national / total
+  const direction = nationalPct >= 0.5 ? 'national' : 'international'
+  const majorityPct = Math.max(nationalPct, 1 - nationalPct)
+  const minority = direction === 'national' ? 'international' : 'national'
+  const minorityCount = direction === 'national' ? international : national
+  return { direction, minority, majorityPct, minorityCount, total }
+}
+
+function matchesScope(destination, direction) {
+  if (!direction) return true
+  return direction === 'national' ? destination.domestic : !destination.domestic
+}
+
+// Produces 2-3 viable destinations with full group scoring and explanations,
+// or a date-conflict result if the group has no common travel window at all.
 export function generateOptions(participants, responsesByParticipant, maxOptions = 3) {
   const entries = completedResponses(participants, responsesByParticipant)
-  if (entries.length === 0) return []
+  if (entries.length === 0) return { dateConflict: false, options: [] }
 
-  const scored = DESTINATIONS.map((destination) => {
-    const fits = entries.map(({ participant, response }) => ({
-      participant,
-      response,
-      ...fitForDestination(destination, response),
-    }))
+  const dateWindow = commonDateWindow(entries)
+  if (!dateWindow.exists) {
+    return {
+      dateConflict: true,
+      message: 'The group’s stated dates don’t overlap at all, even accounting for flexibility — there’s currently no common travel window, so no destinations can be recommended yet.',
+      options: [],
+    }
+  }
 
-    const preferenceFits = fits.map((f) => f.details.preferenceFit)
-    const avgPreferenceFit = preferenceFits.reduce((a, b) => a + b, 0) / preferenceFits.length
-    const minPreferenceFit = Math.min(...preferenceFits)
-    const groupCompatibility = 0.7 * avgPreferenceFit + 0.3 * minPreferenceFit
+  const scope = scopeConsensus(entries)
+  const primaryCandidates = DESTINATIONS.filter((d) => matchesScope(d, scope.direction))
+  const wildcardCandidates = scope.minority ? DESTINATIONS.filter((d) => matchesScope(d, scope.minority)) : []
 
-    const avg = (key) => fits.reduce((sum, f) => sum + f.details[key], 0) / fits.length
-
-    const score100 =
-      avgPreferenceFit * 35 +
-      groupCompatibility * 20 +
-      avg('budgetFit') * 15 +
-      avg('travelFit') * 10 +
-      avg('durationFit') * 5 +
-      avg('paceFit') * 5 +
-      avg('stayFit') * 5 +
-      avg('travelModeFit') * 5
-
-    const reds = fits.filter((f) => f.blocked).length
-    const primaryAxis = Object.entries(destination.profile).sort((a, b) => b[1] - a[1])[0][0]
-
-    return { destination, fits, reds, score100, avgPreferenceFit, groupCompatibility, primaryAxis }
-  })
-
-  scored.sort((a, b) => {
+  const scoredPrimary = primaryCandidates.map((d) => scoreDestination(d, entries))
+  scoredPrimary.sort((a, b) => {
     if (a.reds !== b.reds) return a.reds - b.reds
     return b.score100 - a.score100
   })
 
-  // Pick top options while keeping some diversity of primary experience.
+  // Pick primary options while keeping diversity of primary experience.
   const chosen = []
   const usedAxes = new Set()
-  for (const candidate of scored) {
-    if (chosen.length >= maxOptions) break
-    if (chosen.length > 0 && usedAxes.has(candidate.primaryAxis) && scored.length > maxOptions) continue
+  const primarySlots = wildcardCandidates.length > 0 ? Math.max(1, maxOptions - 1) : maxOptions
+  for (const candidate of scoredPrimary) {
+    if (chosen.length >= primarySlots) break
+    if (chosen.length > 0 && usedAxes.has(candidate.primaryAxis) && scoredPrimary.length > primarySlots) continue
     chosen.push(candidate)
     usedAxes.add(candidate.primaryAxis)
   }
-  while (chosen.length < Math.min(maxOptions, scored.length)) {
-    const next = scored.find((s) => !chosen.includes(s))
+  while (chosen.length < Math.min(primarySlots, scoredPrimary.length)) {
+    const next = scoredPrimary.find((s) => !chosen.includes(s))
     if (!next) break
     chosen.push(next)
   }
 
-  return chosen.map(buildOptionSummary)
+  // Wildcard: only include a minority-scope destination if it clears its
+  // own bar — strong for the minority traveller(s), still reasonable for
+  // the group, and not just included because someone asked for it.
+  let wildcard = null
+  if (wildcardCandidates.length > 0) {
+    const scoredWildcards = wildcardCandidates
+      .map((d) => scoreDestination(d, entries))
+      .filter((c) => c.reds === 0)
+      .sort((a, b) => b.score100 - a.score100)
+    const top = scoredWildcards[0]
+    if (top) {
+      const minorityFits = top.fits.filter(({ response }) => response.trip_scope === scope.minority)
+      const minorityFitStrong = minorityFits.length > 0 && minorityFits.every((f) => f.details.preferenceFit >= 0.6)
+      const groupStillReasonable = top.groupCompatibility >= 0.45
+      if (minorityFitStrong && groupStillReasonable) {
+        wildcard = top
+      }
+    }
+  }
+
+  const results = chosen.map((c) => buildOptionSummary(c, false))
+  if (wildcard) results.push(buildOptionSummary(wildcard, true))
+
+  return { dateConflict: false, options: results, scope }
 }
 
-function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) {
+function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }, isWildcard) {
   const groupFitScore = Math.round(score100)
 
   let alignment = 'Strong alignment'
@@ -412,21 +484,21 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
   else if (groupFitScore < 55) alignment = 'Partial alignment'
   else if (groupFitScore < 75) alignment = 'Good alignment'
 
-  // Why it works for each traveller, grounded in their actual picks.
+  // Why it works for each traveller — only their own selected preferences,
+  // never a negative for something they didn't pick.
   const perTraveller = fits.map(({ participant, response, blocked, reasons }) => {
     const bullets = []
     if (response.destination_no_pref || !(response.destination_types || []).length) {
-      bullets.push({ preference: 'No preference expressed', matches: `open to whatever the group decides` })
+      bullets.push({ preference: 'No preference expressed', matches: 'open to whatever the group decides', strong: true })
     } else {
       for (const axis of response.destination_types) {
         const strength = destination.profile[axis] ?? 0.3
-        bullets.push({
-          preference: axis,
-          matches: strength >= 0.6
-            ? destination.highlights?.[axis] || `${destination.name}'s ${axis.toLowerCase()} side`
-            : `${destination.name} isn't strongly known for this`,
-          strong: strength >= 0.6,
-        })
+        if (strength >= 0.5) {
+          bullets.push({ preference: axis, matches: destination.highlights?.[axis] || `${destination.name}'s ${axis.toLowerCase()} side`, strong: true })
+        }
+      }
+      if (bullets.length === 0) {
+        bullets.push({ preference: response.destination_types.join(' + '), matches: `${destination.name} doesn't strongly cover this, but was still the best available fit`, strong: false })
       }
     }
     return { name: participant.name, bullets, blocked, blockReasons: blocked ? reasons.filter((r) => r.ok === false).map((r) => r.text) : [] }
@@ -467,17 +539,19 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
   practicalFit.push(`Usually a ${destination.recommendedDuration.min}-${destination.recommendedDuration.max} day trip`)
   practicalFit.push(`Runs ${destination.typicalPace}-paced`)
   const blockedNames = fits.filter((f) => f.blocked).map((f) => f.participant.name)
-  if (blockedNames.length) practicalFit.push(`Dealbreaker or hard limit hit for: ${blockedNames.join(', ')}`)
+  if (blockedNames.length) practicalFit.push(`Dealbreaker hit for: ${blockedNames.join(', ')}`)
 
   const whyShortlisted = reds > 0
     ? `Scores ${groupFitScore}/100 overall, but doesn't clear a hard constraint for ${blockedNames.join(', ')} — shown for transparency, not as a top pick.`
-    : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
+    : isWildcard
+      ? `A wildcard: it's the minority pick in the group, but it's strong for the person(s) who wanted it and still scores ${groupFitScore}/100 for the group overall.`
+      : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
 
   const whoCompromises = fits.filter((f) => f.level === 'yellow').map((f) => f.participant.name)
   const whoBlocked = blockedNames
   const strengths = []
   if (reds === 0) strengths.push('No hard-constraint conflicts for anyone')
-  if (fits.every((f) => f.details.budgetFit >= 0.7)) strengths.push('Fits everyone’s budget comfortably')
+  if (fits.every((f) => f.details.budgetFit >= 0.6)) strengths.push('Fits everyone’s budget comfortably')
   if (sharedExperiences.length > 0) strengths.push('Genuine shared experience across different picks')
 
   return {
@@ -485,6 +559,7 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
     destination,
     alignment,
     groupFitScore,
+    isWildcard: Boolean(isWildcard),
     strengths,
     whoCompromises,
     whoBlocked,
