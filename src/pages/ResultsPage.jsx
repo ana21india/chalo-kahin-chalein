@@ -208,22 +208,17 @@ function OptionCard({ option, isOpen, onToggle }) {
       <button onClick={onToggle} className="w-full flex items-center justify-between text-left">
         <div>
           <div className="font-extrabold text-lg text-neutral-900">{option.name}</div>
-          <Pill tone={alignmentTone(option.alignment)} className="mt-1">{option.alignment}</Pill>
+          <div className="flex items-center gap-2 mt-1">
+            <Pill tone={alignmentTone(option.alignment)}>{option.alignment}</Pill>
+            <span className="text-xs font-bold text-neutral-400">{option.groupFitScore}/100</span>
+          </div>
         </div>
         {isOpen ? <ChevronUp className="text-neutral-400" /> : <ChevronDown className="text-neutral-400" />}
       </button>
 
       {isOpen && (
         <div className="mt-4 space-y-4">
-          {option.strengths.length > 0 && (
-            <div>
-              {option.strengths.map((s) => (
-                <div key={s} className="text-sm text-emerald-700 flex items-start gap-1.5 mb-1">
-                  <span>✓</span><span>{s}</span>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-sm text-neutral-600">{option.whyShortlisted}</p>
 
           {option.whoBlocked.length > 0 && (
             <div className="bg-rose-50 rounded-xl p-3">
@@ -239,12 +234,51 @@ function OptionCard({ option, isOpen, onToggle }) {
             </div>
           )}
 
-          {option.compromiseNotes.length > 0 && (
+          <div>
+            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Why it works, person by person</div>
+            <div className="space-y-3">
+              {option.perTraveller.map((t) => (
+                <div key={t.name}>
+                  <div className="text-sm font-bold text-neutral-800 mb-1">{t.name}</div>
+                  <ul className="space-y-0.5">
+                    {t.bullets.map((b, i) => (
+                      <li key={i} className="text-xs text-neutral-600 flex items-start gap-1.5">
+                        <span>{b.strong === false ? '⚠️' : '✓'}</span>
+                        <span><span className="font-medium">{b.preference}</span> → {b.matches}</span>
+                      </li>
+                    ))}
+                    {t.blocked && t.blockReasons.map((r, i) => (
+                      <li key={`b${i}`} className="text-xs text-rose-600 flex items-start gap-1.5">
+                        <span>✗</span><span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {option.sharedExperiences.length > 0 && (
             <div>
-              <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-1">Potential compromise</div>
-              {option.compromiseNotes.map((n) => <p key={n} className="text-sm text-neutral-600">{n}</p>)}
+              <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Shared experiences</div>
+              <ul className="space-y-1">
+                {option.sharedExperiences.map((s) => (
+                  <li key={s.experience} className="text-xs text-lagoon-700 flex items-start gap-1.5">
+                    <span>✓</span><span><span className="font-medium">{s.experience}</span> — {s.why}</span>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
+
+          <div>
+            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Practical fit</div>
+            <ul className="space-y-0.5">
+              {option.practicalFit.map((p, i) => (
+                <li key={i} className="text-xs text-neutral-600">• {p}</li>
+              ))}
+            </ul>
+          </div>
 
           <div>
             <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Person-level fit</div>
