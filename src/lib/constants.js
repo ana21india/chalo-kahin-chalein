@@ -52,10 +52,6 @@ export const DATE_FLEXIBILITY_OPTIONS = [
   { value: 'very_flexible', label: 'Very flexible' },
 ]
 
-// This prototype has no accounts, so "only the coordinator can create a
-// trip" is enforced by fixing who that coordinator is rather than by login.
-export const COORDINATOR_NAME = 'Riya'
-
 export const PHASES = [
   { key: 'destinationType', title: 'Destination type', question: 'What kind of place do you want?', options: DESTINATION_TYPES },
   { key: 'activities', title: 'Activities', question: 'What do you want to do?', options: ACTIVITIES },

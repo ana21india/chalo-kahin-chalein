@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Screen, TopBar, Button, TextInput, Card } from '../components/ui'
-import { DURATION_OPTIONS, DATES_TYPE_OPTIONS, COORDINATOR_NAME, storeParticipant } from '../lib/constants'
+import { DURATION_OPTIONS, DATES_TYPE_OPTIONS, storeParticipant } from '../lib/constants'
 import { createTrip } from '../lib/api'
 
 export default function CreateTripPage() {
   const navigate = useNavigate()
-  const coordinatorName = COORDINATOR_NAME
+  const [coordinatorName, setCoordinatorName] = useState('')
   const [tripName, setTripName] = useState('')
   const [initialDestination, setInitialDestination] = useState('')
   const [datesType, setDatesType] = useState('flexible')
@@ -17,7 +17,7 @@ export default function CreateTripPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  const canSubmit = tripName.trim() && !submitting
+  const canSubmit = coordinatorName.trim() && tripName.trim() && !submitting
 
   async function handleCreate() {
     if (!canSubmit) return
@@ -25,7 +25,7 @@ export default function CreateTripPage() {
     setError('')
     try {
       const { trip, participant } = await createTrip({
-        coordinatorName,
+        coordinatorName: coordinatorName.trim(),
         tripName: tripName.trim(),
         initialDestination: initialDestination.trim(),
         datesType,
@@ -47,10 +47,8 @@ export default function CreateTripPage() {
     <Screen>
       <TopBar title="Create a trip" subtitle="A few basics to get your group started." onBack={() => navigate('/')} />
       <div className="flex-1 px-5 py-4 space-y-5 overflow-y-auto pb-28">
-        <Field label="Who is coordinating this trip?" hint="Only the coordinator can start a Trip Project — that's you, Riya.">
-          <div className="px-4 py-3.5 rounded-2xl border border-neutral-200 bg-neutral-50 text-neutral-700 text-sm font-medium">
-            {coordinatorName}
-          </div>
+        <Field label="Who is coordinating this trip?">
+          <TextInput value={coordinatorName} onChange={setCoordinatorName} placeholder="Your name" />
         </Field>
 
         <Field label="What should we call this trip?" hint="e.g. Goa 2026, Thailand Trip, College Reunion">
