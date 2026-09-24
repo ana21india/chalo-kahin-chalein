@@ -185,6 +185,7 @@ const CONFLICT_HEADINGS = {
   date: 'No common travel window yet',
   scope: 'National vs. international is a deadlock',
   duration: 'No trip length works for everyone yet',
+  travel: 'No destination reachable for everyone yet',
 }
 
 function OptionsTab({ optionsResult, counts }) {

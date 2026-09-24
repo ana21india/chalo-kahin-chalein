@@ -1,4 +1,5 @@
 import { DESTINATIONS, EXPERIENCE_CLUSTERS } from './destinations'
+import { estimateTravelHours } from './travelTimes'
 
 export function isCompleted(response) {
   return response?.status === 'completed'
@@ -245,13 +246,11 @@ function hardConstraintCheck(destination, response) {
     }
   }
 
-  if (response.travel_time_max && response.travel_time_max !== 'no_limit' && (response.travel_time_firmness || 'preference') === 'hard') {
-    const maxHours = travelTimeMaxHours(response.travel_time_max)
-    if (destination.travelTimeHours > maxHours) {
-      blocked = true
-      reasons.push('Travel time is longer than your hard limit')
-    }
-  }
+  // Travel time is NOT checked here — a hard travel-time limit filters the
+  // destination out of the candidate pool entirely (see
+  // destinationTravelFeasible / travelFeasibleForGroup below), it never
+  // shows up as a "blocked, but still listed" conflict the way budget/scope
+  // do. See the architecture note above generateOptions.
 
   // A non-negotiable national/international answer is a personal hard
   // constraint for this person specifically, even though scope is normally
@@ -300,7 +299,20 @@ function computeFitDetails(destination, response) {
   let travelFit = 1
   if (response.travel_time_max && response.travel_time_max !== 'no_limit') {
     const maxHours = travelTimeMaxHours(response.travel_time_max)
-    travelFit = clamp01(1 - (destination.travelTimeHours / maxHours) * 0.4)
+    const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
+    const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
+    let actualHours = destination.travelTimeHours
+    if (availableModes.length === 0) {
+      // The requested mode doesn't reach this destination at all — treat it
+      // as a poor (not feasible-but-slow) fit rather than the fallback time.
+      actualHours = destination.travelTimeHours * 2
+    } else if (response.starting_city) {
+      const estimates = availableModes
+        .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
+        .filter((h) => h != null)
+      if (estimates.length > 0) actualHours = Math.min(...estimates)
+    }
+    travelFit = clamp01(1 - (actualHours / maxHours) * 0.4)
   }
 
   let durationFit = 1
@@ -466,6 +478,45 @@ function durationConflict(entries) {
   return highestMin > lowestMax
 }
 
+// Layer 2 — destination-level travel feasibility. A hard travel-time limit
+// eliminates a DESTINATION from the candidate pool; it never eliminates the
+// trip. Respects the traveller's chosen mode exactly (a flight time can
+// never rescue a "Train, hard limit" answer), compares against real
+// mode/origin-aware durations where we have them, and only ever blocks on
+// "preference"-firmness data we actually have — never on a hallucinated
+// number. See travelTimes.js.
+function destinationTravelFeasible(destination, response) {
+  if (!response.travel_time_max || response.travel_time_max === 'no_limit') return { feasible: true }
+  if ((response.travel_time_firmness || 'preference') !== 'hard') return { feasible: true }
+
+  const maxHours = travelTimeMaxHours(response.travel_time_max)
+  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
+
+  // The requested mode doesn't serve this destination at all (e.g. Train to
+  // Bali) — genuinely unreachable, independent of any time estimate.
+  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
+  if (availableModes.length === 0) {
+    return { feasible: false, reason: `Not reachable by ${requestedModes.join('/')}` }
+  }
+
+  if (!response.starting_city) return { feasible: true }
+
+  const estimates = availableModes
+    .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
+    .filter((h) => h != null)
+  if (estimates.length === 0) return { feasible: true } // no curated data for this route — don't guess
+
+  const best = Math.min(...estimates)
+  if (best > maxHours) {
+    return { feasible: false, reason: `From ${response.starting_city}, the fastest option (${availableModes.join('/')}) is ~${Math.round(best)}h — over the hard limit` }
+  }
+  return { feasible: true }
+}
+
+function travelFeasibleForGroup(destination, entries) {
+  return entries.every(({ response }) => destinationTravelFeasible(destination, response).feasible)
+}
+
 // Produces 2-3 viable destinations with full group scoring and explanations,
 // or a date-conflict result if the group has no common travel window at all.
 export function generateOptions(participants, responsesByParticipant, maxOptions = 3) {
@@ -501,8 +552,18 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
   }
 
   const scope = scopeConsensus(entries)
-  const primaryCandidates = DESTINATIONS.filter((d) => matchesScope(d, scope.direction))
-  const wildcardCandidates = scope.minority ? DESTINATIONS.filter((d) => matchesScope(d, scope.minority)) : []
+  const travelFeasible = (d) => travelFeasibleForGroup(d, entries)
+  const primaryCandidates = DESTINATIONS.filter((d) => matchesScope(d, scope.direction) && travelFeasible(d))
+  const wildcardCandidates = scope.minority ? DESTINATIONS.filter((d) => matchesScope(d, scope.minority) && travelFeasible(d)) : []
+
+  if (primaryCandidates.length === 0 && wildcardCandidates.length === 0) {
+    return {
+      dateConflict: true,
+      conflictType: 'travel',
+      message: 'No destination is currently reachable within everyone’s hard travel-time limits and chosen transport modes — this isn’t about whether the group can travel together, just that none of the candidate destinations clear everyone’s travel bar yet. Relaxing a travel-time limit, its strictness, or the transport mode for whoever is most restrictive would open up options.',
+      options: [],
+    }
+  }
 
   const scoredPrimary = primaryCandidates.map((d) => scoreDestination(d, entries))
   scoredPrimary.sort((a, b) => {
