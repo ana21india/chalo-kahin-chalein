@@ -5,7 +5,7 @@ import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
 import { completionCounts, groupConsensus, singleFieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
-import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS } from '../lib/constants'
+import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES } from '../lib/constants'
 
 const optionValues = (options) => options.map((o) => (typeof o === 'string' ? o : o.value))
 
@@ -138,6 +138,7 @@ function ConsensusTab({ participants, responses }) {
   const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS), optionValues(ROOM_OPTIONS))
   const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS), optionValues(TRAVEL_TIME_OPTIONS))
   const startingPoints = singleFieldConsensus(participants, responses, 'starting_city')
+  const travelMode = singleFieldConsensus(participants, responses, 'travel_mode', {}, optionValues(TRAVEL_MODES))
   return (
     <Card className="p-5">
       <ConsensusRow label="National or international" items={scope} />
@@ -145,6 +146,8 @@ function ConsensusTab({ participants, responses }) {
       <ConsensusRow label="Kind of trip" items={places} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Starting point" items={startingPoints} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Mode of transport" items={travelMode} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Travel time" items={travelTime} />
       <div className="h-px bg-neutral-100 my-4" />
