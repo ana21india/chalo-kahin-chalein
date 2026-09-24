@@ -1,20 +1,13 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Screen, TopBar, Button, TextInput, Card } from '../components/ui'
-import { DURATION_OPTIONS, DATES_TYPE_OPTIONS, storeParticipant } from '../lib/constants'
+import { Screen, TopBar, Button, TextInput } from '../components/ui'
+import { storeParticipant } from '../lib/constants'
 import { createTrip } from '../lib/api'
-
-const today = new Date().toISOString().slice(0, 10)
 
 export default function CreateTripPage() {
   const navigate = useNavigate()
   const [coordinatorName, setCoordinatorName] = useState('')
   const [tripName, setTripName] = useState('')
-  const [datesType, setDatesType] = useState('flexible')
-  const [dateStart, setDateStart] = useState('')
-  const [dateEnd, setDateEnd] = useState('')
-  const [dateMonth, setDateMonth] = useState('')
-  const [duration, setDuration] = useState('Not decided')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -28,11 +21,6 @@ export default function CreateTripPage() {
       const { trip, participant } = await createTrip({
         coordinatorName: coordinatorName.trim(),
         tripName: tripName.trim(),
-        datesType,
-        dateStart,
-        dateEnd,
-        dateMonth,
-        duration,
       })
       storeParticipant(trip.id, { id: participant.id, name: participant.name, isCoordinator: true })
       navigate(`/trip/${trip.id}/dashboard`)
@@ -52,46 +40,7 @@ export default function CreateTripPage() {
         </Field>
 
         <Field label="What should we call this trip?" hint="e.g. Goa 2026, Thailand Trip, College Reunion">
-          <TextInput value={tripName} onChange={setTripName} placeholder="Trip name" />
-        </Field>
-
-        <Field label="Approximate dates">
-          <div className="grid grid-cols-2 gap-2">
-            {DATES_TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setDatesType(opt.value)}
-                className={`px-3 py-3 rounded-xl2 text-sm font-medium border text-left ${datesType === opt.value ? 'bg-sunset-500 border-sunset-500 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {datesType === 'specific' || datesType === 'range' ? (
-            <div className="flex gap-2 mt-3">
-              <TextInput type="date" value={dateStart} onChange={setDateStart} min={today} />
-              <TextInput type="date" value={dateEnd} onChange={setDateEnd} min={dateStart || today} />
-            </div>
-          ) : null}
-          {datesType === 'month' ? (
-            <div className="mt-3">
-              <TextInput value={dateMonth} onChange={setDateMonth} placeholder="e.g. December 2026" />
-            </div>
-          ) : null}
-        </Field>
-
-        <Field label="Approximate trip duration">
-          <div className="flex flex-wrap gap-2">
-            {DURATION_OPTIONS.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDuration(d)}
-                className={`px-4 py-2.5 rounded-full text-sm font-medium border ${duration === d ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+          <TextInput value={tripName} onChange={setTripName} placeholder="Trip name" onKeyDown={(e) => e.key === 'Enter' && handleCreate()} />
         </Field>
 
         {error && <p className="text-xs text-rose-500">{error}</p>}
