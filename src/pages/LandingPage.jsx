@@ -39,7 +39,7 @@ export default function LandingPage() {
               <button onClick={() => navigate('/create')} className="w-full flex items-center justify-between text-left">
                 <div>
                   <div className="font-bold text-neutral-900">Create a trip</div>
-                  <div className="text-xs text-neutral-500 mt-0.5">Start a new Trip Project and invite your group</div>
+                  <div className="text-xs text-neutral-500 mt-0.5">For the coordinator — start a new Trip Project and invite your group</div>
                 </div>
                 <ArrowRight className="text-sunset-500" size={20} />
               </button>
