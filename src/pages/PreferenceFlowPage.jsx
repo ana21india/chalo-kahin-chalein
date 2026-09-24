@@ -5,11 +5,12 @@ import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../compon
 import ChipSelect from '../components/ChipSelect'
 import {
   DESTINATION_TYPES, ACTIVITIES, VIBES, DEALBREAKERS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
-  DATE_FLEXIBILITY_OPTIONS, getStoredParticipant,
+  DATE_FLEXIBILITY_OPTIONS, TRIP_SCOPE_OPTIONS, getStoredParticipant,
 } from '../lib/constants'
+import { DESTINATIONS } from '../lib/destinations'
 import { getTrip, getResponse, upsertResponse } from '../lib/api'
 
-const STEPS = ['destinationType', 'activities', 'vibe', 'specificDestinations', 'budget', 'dates', 'travel', 'dealbreakers', 'review']
+const STEPS = ['destinationType', 'activities', 'vibe', 'tripScope', 'specificDestinations', 'budget', 'dates', 'travel', 'dealbreakers', 'review']
 
 const INTEGER_FIELDS = ['budget_min', 'budget_max', 'budget_ceiling', 'min_days', 'max_days']
 const DATE_FIELDS = ['date_range_start', 'date_range_end']
@@ -30,6 +31,7 @@ const emptyForm = {
   destination_types: [], destination_no_pref: false,
   activities: [], activities_no_pref: false,
   vibes: [], vibes_no_pref: false,
+  trip_scope: 'either',
   specific_destinations: [], no_specific_destination: false, include_coordinator_destination: null,
   budget_min: '', budget_max: '', budget_ceiling: '', budget_hard_limit: true,
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '',
@@ -144,9 +146,13 @@ export default function PreferenceFlowPage() {
             onNoPreferenceChange={(v) => set({ vibes_no_pref: v })}
           />
         )}
+        {current === 'tripScope' && (
+          <TripScopePhase value={form.trip_scope} onChange={(v) => set({ trip_scope: v })} />
+        )}
         {current === 'specificDestinations' && (
           <SpecificDestinations
             trip={trip}
+            scope={form.trip_scope}
             values={form.specific_destinations}
             noSpecific={form.no_specific_destination}
             includeCoordinatorDestination={form.include_coordinator_destination}
@@ -209,14 +215,44 @@ function PhaseTop3({ title, subtitle, options, selected, noPreference, onChange,
   )
 }
 
-function SpecificDestinations({ trip, values, noSpecific, includeCoordinatorDestination, onValuesChange, onNoSpecificChange, onIncludeCoordinatorChange }) {
+function TripScopePhase({ value, onChange }) {
+  return (
+    <div>
+      <PhaseHeader title="National or international?" subtitle="This helps us suggest the right kind of places next." />
+      <div className="flex flex-col gap-2">
+        {TRIP_SCOPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            onClick={() => onChange(opt.value)}
+            className={`px-4 py-3.5 rounded-2xl text-left border transition-colors flex items-center justify-between
+              ${value === opt.value ? 'bg-sunset-500 border-sunset-500 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
+          >
+            <span className="font-semibold text-sm">{opt.label}</span>
+            <span className={`text-xs ${value === opt.value ? 'text-white/80' : 'text-neutral-400'}`}>{opt.hint}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function SpecificDestinations({ trip, scope, values, noSpecific, includeCoordinatorDestination, onValuesChange, onNoSpecificChange, onIncludeCoordinatorChange }) {
   const [input, setInput] = useState('')
 
-  function add() {
-    const v = input.trim()
+  const suggestions = useMemo(() => {
+    const pool = DESTINATIONS.filter((d) => {
+      if (scope === 'national') return d.domestic
+      if (scope === 'international') return !d.domestic
+      return true
+    })
+    return pool.slice(0, 8).map((d) => d.name)
+  }, [scope])
+
+  function add(name) {
+    const v = (name ?? input).trim()
     if (!v || values.length >= 3 || noSpecific) return
     if (!values.includes(v)) onValuesChange([...values, v])
-    setInput('')
+    if (!name) setInput('')
   }
   function remove(v) {
     onValuesChange(values.filter((x) => x !== v))
@@ -224,7 +260,14 @@ function SpecificDestinations({ trip, values, noSpecific, includeCoordinatorDest
 
   return (
     <div>
-      <PhaseHeader title="Is there somewhere you specifically want to go?" subtitle="Add up to 3 places. Totally optional." />
+      <PhaseHeader
+        title="Is there somewhere you specifically want to go?"
+        subtitle={
+          scope === 'national' ? 'A few popular picks within India — or add your own. Up to 3.'
+          : scope === 'international' ? 'A few popular picks abroad — or add your own. Up to 3.'
+          : 'Add up to 3 places. Totally optional.'
+        }
+      />
 
       {trip.initial_destination && trip.initial_destination.toLowerCase() !== 'not decided yet' && (
         <Card className="p-4 mb-4 bg-sunset-50 border-sunset-100">
@@ -257,10 +300,24 @@ function SpecificDestinations({ trip, values, noSpecific, includeCoordinatorDest
         ))}
       </div>
 
+      {!noSpecific && values.length < 3 && suggestions.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {suggestions.filter((s) => !values.includes(s)).map((s) => (
+            <button
+              key={s}
+              onClick={() => add(s)}
+              className="px-3.5 py-2 rounded-full text-xs font-medium border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-400 flex items-center gap-1"
+            >
+              <Plus size={12} />{s}
+            </button>
+          ))}
+        </div>
+      )}
+
       {!noSpecific && values.length < 3 && (
         <div className="flex gap-2 mb-4">
           <TextInput value={input} onChange={setInput} placeholder="e.g. Goa, Bali, Vietnam" onKeyDown={(e) => e.key === 'Enter' && add()} />
-          <button onClick={add} className="px-4 py-2 bg-sunset-500 text-white rounded-2xl text-sm font-semibold flex items-center gap-1"><Plus size={14} />Add</button>
+          <button onClick={() => add()} className="px-4 py-2 bg-sunset-500 text-white rounded-2xl text-sm font-semibold flex items-center gap-1"><Plus size={14} />Add</button>
         </div>
       )}
 
@@ -427,11 +484,13 @@ function DealbreakersPhase({ form, set }) {
 }
 
 function ReviewPhase({ form, onEdit }) {
+  const scopeLabel = TRIP_SCOPE_OPTIONS.find((o) => o.value === form.trip_scope)?.label
   const rows = [
-    { title: 'Destination preferences', step: 0, items: form.destination_no_pref ? ['No preference'] : form.destination_types },
-    { title: 'Activities', step: 1, items: form.activities_no_pref ? ['No preference'] : form.activities },
-    { title: 'Trip vibe', step: 2, items: form.vibes_no_pref ? ['No preference'] : form.vibes },
-    { title: 'Specific destinations', step: 3, items: form.no_specific_destination ? ['No specific destination'] : form.specific_destinations },
+    { title: 'Destination preferences', step: STEPS.indexOf('destinationType'), items: form.destination_no_pref ? ['No preference'] : form.destination_types },
+    { title: 'Activities', step: STEPS.indexOf('activities'), items: form.activities_no_pref ? ['No preference'] : form.activities },
+    { title: 'Trip vibe', step: STEPS.indexOf('vibe'), items: form.vibes_no_pref ? ['No preference'] : form.vibes },
+    { title: 'National or international', step: STEPS.indexOf('tripScope'), items: scopeLabel ? [scopeLabel] : [] },
+    { title: 'Specific destinations', step: STEPS.indexOf('specificDestinations'), items: form.no_specific_destination ? ['No specific destination'] : form.specific_destinations },
   ]
   return (
     <div>
@@ -456,7 +515,7 @@ function ReviewPhase({ form, onEdit }) {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-neutral-400 uppercase tracking-wide">Budget</span>
-            <button onClick={() => onEdit(4)} className="text-xs font-semibold text-sunset-500">Edit</button>
+            <button onClick={() => onEdit(STEPS.indexOf('budget'))} className="text-xs font-semibold text-sunset-500">Edit</button>
           </div>
           <p className="text-sm text-neutral-800">
             {form.budget_min || form.budget_max ? `₹${form.budget_min || '0'}–₹${form.budget_max || '?'}` : 'Not set'}
@@ -467,7 +526,7 @@ function ReviewPhase({ form, onEdit }) {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-neutral-400 uppercase tracking-wide">Dates</span>
-            <button onClick={() => onEdit(5)} className="text-xs font-semibold text-sunset-500">Edit</button>
+            <button onClick={() => onEdit(STEPS.indexOf('dates'))} className="text-xs font-semibold text-sunset-500">Edit</button>
           </div>
           <p className="text-sm text-neutral-800">
             {form.date_range_start && form.date_range_end ? `${form.date_range_start} to ${form.date_range_end}` : 'Flexible'}
@@ -477,7 +536,7 @@ function ReviewPhase({ form, onEdit }) {
         <Card className="p-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-neutral-400 uppercase tracking-wide">Dealbreakers</span>
-            <button onClick={() => onEdit(7)} className="text-xs font-semibold text-sunset-500">Edit</button>
+            <button onClick={() => onEdit(STEPS.indexOf('dealbreakers'))} className="text-xs font-semibold text-sunset-500">Edit</button>
           </div>
           {form.no_dealbreakers || form.dealbreakers.length === 0 ? (
             <p className="text-sm text-neutral-400">None</p>

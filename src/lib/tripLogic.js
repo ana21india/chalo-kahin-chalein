@@ -144,21 +144,23 @@ export function fitForDestination(destination, response) {
   let score = 0
 
   if (!response.destination_no_pref) {
-    const types = response.destination_types || []
-    const s = overlapScore(types, destination.types)
+    const s = overlapScore(response.destination_types, destination.types)
     score += s * 3
     if (s > 0) reasons.push({ ok: true, text: `Matches your destination-type preference` })
+  }
 
-    if (types.includes('International') && !destination.domestic) {
+  if (response.trip_scope === 'international') {
+    if (!destination.domestic) {
       score += 2
       reasons.push({ ok: true, text: 'This is the international trip you wanted' })
-    } else if (types.includes('International') && destination.domestic) {
+    } else {
       reasons.push({ ok: 'warn', text: 'You wanted international — this one is domestic' })
     }
-    if (types.includes('National') && destination.domestic) {
+  } else if (response.trip_scope === 'national') {
+    if (destination.domestic) {
       score += 2
       reasons.push({ ok: true, text: 'This is the domestic (within-India) trip you wanted' })
-    } else if (types.includes('National') && !destination.domestic) {
+    } else {
       reasons.push({ ok: 'warn', text: 'You wanted a domestic trip — this one is international' })
     }
   }

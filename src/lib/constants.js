@@ -1,6 +1,11 @@
 export const DESTINATION_TYPES = [
   'Beach', 'Mountains', 'City', 'Nature', 'Adventure', 'Cultural', 'Relaxation', 'Nightlife',
-  'National', 'International',
+]
+
+export const TRIP_SCOPE_OPTIONS = [
+  { value: 'national', label: 'National', hint: 'Within India' },
+  { value: 'international', label: 'International', hint: 'Outside India' },
+  { value: 'either', label: 'Either works for me', hint: 'No strong preference' },
 ]
 
 export const ACTIVITIES = [
