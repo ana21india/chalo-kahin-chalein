@@ -5,7 +5,9 @@ import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
 import { completionCounts, groupConsensus, singleFieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
-import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS } from '../lib/constants'
+import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS } from '../lib/constants'
+
+const optionValues = (options) => options.map((o) => (typeof o === 'string' ? o : o.value))
 
 function labelMapFrom(options) {
   return Object.fromEntries(options.map((o) => [o.value, o.label]))
@@ -111,7 +113,7 @@ function ConsensusRow({ label, items }) {
         <p className="text-sm text-neutral-400">No preferences expressed yet.</p>
       ) : (
         <div className="space-y-2">
-          {items.slice(0, 6).map((it) => (
+          {items.map((it) => (
             <div key={it.option}>
               <div className="flex items-center justify-between text-sm mb-1">
                 <span className="text-neutral-800 font-medium">{it.option}</span>
@@ -129,12 +131,12 @@ function ConsensusRow({ label, items }) {
 }
 
 function ConsensusTab({ participants, responses }) {
-  const scope = singleFieldConsensus(participants, responses, 'trip_scope', labelMapFrom(TRIP_SCOPE_OPTIONS))
-  const places = groupConsensus(participants, responses, 'destination_types', 'destination_no_pref')
-  const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS))
-  const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS))
-  const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS))
-  const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS))
+  const scope = singleFieldConsensus(participants, responses, 'trip_scope', labelMapFrom(TRIP_SCOPE_OPTIONS), optionValues(TRIP_SCOPE_OPTIONS))
+  const places = groupConsensus(participants, responses, 'destination_types', 'destination_no_pref', optionValues(TRIP_TYPE_OPTIONS))
+  const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS), optionValues(PACE_OPTIONS))
+  const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS), optionValues(STAY_OPTIONS))
+  const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS), optionValues(ROOM_OPTIONS))
+  const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS), optionValues(TRAVEL_TIME_OPTIONS))
   const startingPoints = singleFieldConsensus(participants, responses, 'starting_city')
   return (
     <Card className="p-5">

@@ -25,8 +25,11 @@ function completedResponses(participants, responsesByParticipant) {
 
 // Consensus for a Top-N phase: only counts people who expressed an actual
 // preference. "No preference" participants are excluded from the denominator
-// entirely — they are never treated as votes against an option.
-export function groupConsensus(participants, responsesByParticipant, field, noPrefField) {
+// entirely — they are never treated as votes against an option. When
+// `allOptions` is given, every option in the list is included even at 0/0 —
+// otherwise an option nobody picked would just silently disappear, which
+// looks like the question was never asked rather than answered with "no".
+export function groupConsensus(participants, responsesByParticipant, field, noPrefField, allOptions = null) {
   const entries = completedResponses(participants, responsesByParticipant)
   const expressed = entries.filter(({ response }) => !response[noPrefField])
   const counts = {}
@@ -37,13 +40,15 @@ export function groupConsensus(participants, responsesByParticipant, field, noPr
     }
   }
   const denom = expressed.length
-  return Object.entries(counts)
-    .map(([option, count]) => ({ option, count, total: denom }))
+  const keys = allOptions || Object.keys(counts)
+  return keys
+    .map((option) => ({ option, count: counts[option] || 0, total: denom }))
     .sort((a, b) => b.count - a.count)
 }
 
-// Consensus for a single-select field (pace, stay type, room sharing).
-export function singleFieldConsensus(participants, responsesByParticipant, field, labelMap = {}) {
+// Consensus for a single-select field (pace, stay type, room sharing). See
+// groupConsensus above for what `allOptions` (raw values, not labels) does.
+export function singleFieldConsensus(participants, responsesByParticipant, field, labelMap = {}, allOptions = null) {
   const entries = completedResponses(participants, responsesByParticipant)
   const answered = entries.filter(({ response }) => response[field])
   const counts = {}
@@ -52,8 +57,9 @@ export function singleFieldConsensus(participants, responsesByParticipant, field
     counts[v] = (counts[v] || 0) + 1
   }
   const denom = answered.length
-  return Object.entries(counts)
-    .map(([option, count]) => ({ option: labelMap[option] || option, count, total: denom }))
+  const keys = allOptions || Object.keys(counts)
+  return keys
+    .map((option) => ({ option: labelMap[option] || option, count: counts[option] || 0, total: denom }))
     .sort((a, b) => b.count - a.count)
 }
 
