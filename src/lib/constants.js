@@ -5,7 +5,7 @@ export const TRIP_SCOPE_OPTIONS = [
 ]
 
 export const TRIP_TYPE_OPTIONS = [
-  'Beach', 'Mountains', 'City', 'Parks & nature', 'Cultural', 'Adventure', 'Relaxation', 'Nightlife',
+  'Beach', 'Mountains', 'City', 'Parks & nature', 'Cultural', 'Adventure', 'Nightlife', 'Romantic',
 ]
 
 export const MAJOR_CITIES = [
