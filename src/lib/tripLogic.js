@@ -210,6 +210,11 @@ export function fitForDestination(destination, response) {
     if (s > 0) reasons.push({ ok: true, text: 'Matches the kind of trip you want' })
   }
 
+  if (!response.no_specific_destination && (response.specific_destinations || []).some((d) => d.toLowerCase().includes(destination.name.split(',')[0].toLowerCase()))) {
+    score += 5
+    reasons.push({ ok: true, text: 'This is a place you specifically asked for' })
+  }
+
   if (response.trip_scope === 'international') {
     if (!destination.domestic) {
       score += 2
