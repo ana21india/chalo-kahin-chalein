@@ -4,9 +4,9 @@ import { Check, X, Plus } from 'lucide-react'
 import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../components/ui'
 import ChipSelect from '../components/ChipSelect'
 import {
-  TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
+  TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS_BY_SCOPE, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
-  DATE_FLEXIBILITY_OPTIONS, getStoredParticipant,
+  DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
 } from '../lib/constants'
 import { getTrip, getResponse, upsertResponse } from '../lib/api'
 
@@ -121,9 +121,12 @@ export default function PreferenceFlowPage() {
         {current === 'startingPoint' && <StartingPointPhase form={form} set={set} />}
         {current === 'tripType' && (
           <div>
-            <PhaseHeader title="What kind of trip is it?" subtitle="Pick up to 2." />
+            <PhaseHeader
+              title="What kind of trip is it?"
+              subtitle={form.trip_scope === 'either' ? 'Pick up to 2.' : `Options for a ${form.trip_scope} trip. Pick up to 2.`}
+            />
             <ChipSelect
-              options={TRIP_TYPE_OPTIONS}
+              options={TRIP_TYPE_OPTIONS_BY_SCOPE[form.trip_scope] || TRIP_TYPE_OPTIONS_BY_SCOPE.either}
               selected={form.destination_types}
               onChange={(v) => set({ destination_types: v })}
               noPreference={form.destination_no_pref}
@@ -253,6 +256,17 @@ function StartingPointPhase({ form, set }) {
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Your city</div>
         <TextInput value={form.starting_city} onChange={(v) => set({ starting_city: v })} placeholder="e.g. Bengaluru" />
+        <div className="flex flex-wrap gap-2 mt-3">
+          {MAJOR_CITIES.filter((c) => c !== form.starting_city).map((c) => (
+            <button
+              key={c}
+              onClick={() => set({ starting_city: c })}
+              className="px-3.5 py-2 rounded-full text-xs font-medium border border-dashed border-neutral-300 text-neutral-600 hover:border-neutral-400"
+            >
+              {c}
+            </button>
+          ))}
+        </div>
       </div>
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2.5">Preferred travel mode</div>

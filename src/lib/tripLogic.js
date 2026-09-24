@@ -178,9 +178,15 @@ export function computeConflicts(participants, responsesByParticipant) {
 }
 
 // "Culture" (shown in the UI) maps to the catalog's "Cultural" tag.
+// Maps the trip-type option labels (which vary by national/international
+// scope) onto the destination catalog's own type tags.
 function catalogTypeAliases(t) {
-  if (t === 'Culture') return ['Culture', 'Cultural']
-  return [t]
+  switch (t) {
+    case 'City & culture': return ['City', 'Cultural']
+    case 'Nature & wildlife': return ['Nature']
+    case 'Mountains & nature': return ['Mountains', 'Nature']
+    default: return [t]
+  }
 }
 
 function overlapScore(selected = [], catalogTypes = []) {

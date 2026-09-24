@@ -4,9 +4,18 @@ export const TRIP_SCOPE_OPTIONS = [
   { value: 'either', label: 'Either works for me', hint: 'No strong preference' },
 ]
 
-// "Culture" is what we show; it maps to the catalog's "Cultural" tag.
-export const TRIP_TYPE_OPTIONS = [
-  'Beach', 'Mountains', 'City', 'Culture', 'Adventure', 'Relaxation',
+// The options shown for "what kind of trip is it?" depend on the
+// national/international answer, matching the categories that actually
+// make sense for each.
+export const TRIP_TYPE_OPTIONS_BY_SCOPE = {
+  national: ['Beach', 'Mountains', 'City & culture', 'Nature & wildlife', 'Adventure'],
+  international: ['Beach', 'Mountains & nature', 'City & culture', 'Adventure'],
+  either: ['Beach', 'Mountains', 'Nature & wildlife', 'City & culture', 'Adventure', 'Relaxation'],
+}
+
+export const MAJOR_CITIES = [
+  'Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad',
+  'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Kochi', 'Lucknow',
 ]
 
 export const DEALBREAKERS = [
