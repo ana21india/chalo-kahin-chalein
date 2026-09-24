@@ -1,7 +1,5 @@
 import { DESTINATIONS } from './destinations'
 
-export const NO_PREFERENCE = '__NO_PREFERENCE__'
-
 export function isCompleted(response) {
   return response?.status === 'completed'
 }
@@ -24,7 +22,7 @@ function completedResponses(participants, responsesByParticipant) {
     .map((p) => ({ participant: p, response: responsesByParticipant[p.id] }))
 }
 
-// Consensus for a Top-3 phase: only counts people who expressed an actual
+// Consensus for a Top-N phase: only counts people who expressed an actual
 // preference. "No preference" participants are excluded from the denominator
 // entirely — they are never treated as votes against an option.
 export function groupConsensus(participants, responsesByParticipant, field, noPrefField) {
@@ -43,6 +41,21 @@ export function groupConsensus(participants, responsesByParticipant, field, noPr
     .sort((a, b) => b.count - a.count)
 }
 
+// Consensus for a single-select field (pace, stay type, room sharing).
+export function singleFieldConsensus(participants, responsesByParticipant, field, labelMap = {}) {
+  const entries = completedResponses(participants, responsesByParticipant)
+  const answered = entries.filter(({ response }) => response[field])
+  const counts = {}
+  for (const { response } of answered) {
+    const v = response[field]
+    counts[v] = (counts[v] || 0) + 1
+  }
+  const denom = answered.length
+  return Object.entries(counts)
+    .map(([option, count]) => ({ option: labelMap[option] || option, count, total: denom }))
+    .sort((a, b) => b.count - a.count)
+}
+
 function travelTimeMaxHours(value) {
   switch (value) {
     case 'under_3h': return 3
@@ -52,50 +65,86 @@ function travelTimeMaxHours(value) {
   }
 }
 
+function isMountainType(t) {
+  return /mountain/i.test(t)
+}
+function isBeachType(t) {
+  return /beach/i.test(t)
+}
+
 // Surfaces meaningful group splits rather than hiding them inside one score.
 export function computeConflicts(participants, responsesByParticipant) {
   const entries = completedResponses(participants, responsesByParticipant)
   const conflicts = []
 
-  // Budget conflict: hard-limit participants vs. everyone comfortable higher.
-  const hardLimiters = entries.filter(({ response }) => response.budget_hard_limit && response.budget_ceiling)
-  const flexible = entries.filter(({ response }) => !response.budget_hard_limit || !response.budget_ceiling)
-  if (hardLimiters.length > 0 && flexible.length > 0) {
-    const lowestCeiling = Math.min(...hardLimiters.map(({ response }) => response.budget_ceiling))
-    const higherComfort = flexible.filter(({ response }) => (response.budget_max || 0) > lowestCeiling)
-    if (higherComfort.length > 0) {
+  // Budget conflict: everyone's max budget is a hard ceiling by design, so a
+  // wide spread of ceilings is itself the split worth surfacing.
+  const withBudget = entries.filter(({ response }) => response.budget_ceiling)
+  if (withBudget.length > 1) {
+    const lowest = Math.min(...withBudget.map(({ response }) => response.budget_ceiling))
+    const tight = withBudget.filter(({ response }) => response.budget_ceiling <= lowest * 1.15)
+    const loose = withBudget.filter(({ response }) => response.budget_ceiling > lowest * 1.15)
+    if (tight.length > 0 && loose.length > 0) {
       conflicts.push({
         type: 'budget',
         title: 'Budget split',
-        description: `${higherComfort.length} ${higherComfort.length === 1 ? 'person is' : 'people are'} comfortable spending above ₹${lowestCeiling.toLocaleString('en-IN')}, but ${hardLimiters.length} ${hardLimiters.length === 1 ? 'person has' : 'people have'} a hard maximum around ₹${lowestCeiling.toLocaleString('en-IN')}.`,
+        description: `${tight.length} ${tight.length === 1 ? 'person has' : 'people have'} a hard maximum around ₹${lowest.toLocaleString('en-IN')}, while ${loose.length} ${loose.length === 1 ? 'person is' : 'people are'} comfortable well above that.`,
         groups: [
-          { label: `Comfortable higher`, people: higherComfort.map(({ participant }) => participant.name) },
-          { label: `Hard maximum ~₹${lowestCeiling.toLocaleString('en-IN')}`, people: hardLimiters.map(({ participant }) => participant.name) },
+          { label: `Maximum ~₹${lowest.toLocaleString('en-IN')}`, people: tight.map(({ participant }) => participant.name) },
+          { label: 'Comfortable higher', people: loose.map(({ participant }) => participant.name) },
         ],
       })
     }
   }
 
-  // Pace conflict: relaxed/slow vs packed/adventure-heavy in vibe picks.
-  const relaxedPace = entries.filter(({ response }) => !response.vibes_no_pref && (response.vibes || []).some((v) => ['Relaxed', 'Slow'].includes(v)))
-  const packedPace = entries.filter(({ response }) => !response.vibes_no_pref && (response.vibes || []).some((v) => ['Packed', 'Adventure-heavy'].includes(v)))
-  const packedOnly = packedPace.filter(({ participant }) => !relaxedPace.some(({ participant: p2 }) => p2.id === participant.id))
-  const relaxedOnly = relaxedPace.filter(({ participant }) => !packedPace.some(({ participant: p2 }) => p2.id === participant.id))
-  if (packedOnly.length > 0 && relaxedOnly.length > 0) {
+  // Pace conflict: packed vs slow.
+  const packed = entries.filter(({ response }) => response.pace === 'packed')
+  const slow = entries.filter(({ response }) => response.pace === 'slow')
+  if (packed.length > 0 && slow.length > 0) {
     conflicts.push({
       type: 'pace',
       title: 'Pace split',
-      description: `${relaxedOnly.length} ${relaxedOnly.length === 1 ? 'person wants' : 'people want'} a relaxed trip, while ${packedOnly.length} ${packedOnly.length === 1 ? 'person wants' : 'people want'} a packed / adventure-heavy itinerary.`,
+      description: `${slow.length} ${slow.length === 1 ? 'person wants' : 'people want'} a slow trip, while ${packed.length} ${packed.length === 1 ? 'person wants' : 'people want'} a packed itinerary.`,
       groups: [
-        { label: 'Relaxed / slow', people: relaxedOnly.map(({ participant }) => participant.name) },
-        { label: 'Packed / adventure-heavy', people: packedOnly.map(({ participant }) => participant.name) },
+        { label: 'Slow', people: slow.map(({ participant }) => participant.name) },
+        { label: 'Packed', people: packed.map(({ participant }) => participant.name) },
+      ],
+    })
+  }
+
+  // Stay-type conflict: hotel vs rental.
+  const hotel = entries.filter(({ response }) => response.stay_type === 'hotel')
+  const rental = entries.filter(({ response }) => response.stay_type === 'rental')
+  if (hotel.length > 0 && rental.length > 0) {
+    conflicts.push({
+      type: 'stay',
+      title: 'Stay-type split',
+      description: `${hotel.length} ${hotel.length === 1 ? 'person prefers' : 'people prefer'} a hotel, ${rental.length} ${rental.length === 1 ? 'person prefers' : 'people prefer'} a rental.`,
+      groups: [
+        { label: 'Hotel', people: hotel.map(({ participant }) => participant.name) },
+        { label: 'Rental', people: rental.map(({ participant }) => participant.name) },
+      ],
+    })
+  }
+
+  // Room-sharing conflict.
+  const shared = entries.filter(({ response }) => response.room_sharing === 'shared')
+  const separate = entries.filter(({ response }) => response.room_sharing === 'separate')
+  if (shared.length > 0 && separate.length > 0) {
+    conflicts.push({
+      type: 'rooms',
+      title: 'Room-sharing split',
+      description: `${separate.length} ${separate.length === 1 ? 'person wants' : 'people want'} separate rooms, ${shared.length} ${shared.length === 1 ? 'person is' : 'people are'} fine sharing.`,
+      groups: [
+        { label: 'Shared rooms', people: shared.map(({ participant }) => participant.name) },
+        { label: 'Separate rooms', people: separate.map(({ participant }) => participant.name) },
       ],
     })
   }
 
   // Destination-type conflict: beach vs mountains being the classic split.
-  const beachLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).includes('Beach'))
-  const mountainLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).includes('Mountains'))
+  const beachLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).some(isBeachType))
+  const mountainLovers = entries.filter(({ response }) => !response.destination_no_pref && (response.destination_types || []).some(isMountainType))
   const beachOnly = beachLovers.filter(({ participant }) => !mountainLovers.some(({ participant: p2 }) => p2.id === participant.id))
   const mountainOnly = mountainLovers.filter(({ participant }) => !beachLovers.some(({ participant: p2 }) => p2.id === participant.id))
   if (beachOnly.length > 0 && mountainOnly.length > 0) {
@@ -110,17 +159,17 @@ export function computeConflicts(participants, responsesByParticipant) {
     })
   }
 
-  // Nightlife conflict: some want it, some have it as a dealbreaker.
-  const wantsNightlife = entries.filter(({ response }) => (response.activities || []).includes('Nightlife') || (response.vibes || []).includes('Party-focused'))
-  const avoidsNightlife = entries.filter(({ response }) => (response.dealbreakers || []).includes('Too much nightlife'))
-  if (wantsNightlife.length > 0 && avoidsNightlife.length > 0) {
+  // National vs international split.
+  const wantsNational = entries.filter(({ response }) => response.trip_scope === 'national')
+  const wantsIntl = entries.filter(({ response }) => response.trip_scope === 'international')
+  if (wantsNational.length > 0 && wantsIntl.length > 0) {
     conflicts.push({
-      type: 'nightlife',
-      title: 'Nightlife split',
-      description: `${wantsNightlife.length} ${wantsNightlife.length === 1 ? 'person wants' : 'people want'} nightlife, but ${avoidsNightlife.length} ${avoidsNightlife.length === 1 ? 'person has' : 'people have'} flagged too much nightlife as a dealbreaker.`,
+      type: 'scope',
+      title: 'National vs. international split',
+      description: `${wantsNational.length} ${wantsNational.length === 1 ? 'person wants' : 'people want'} a national trip, ${wantsIntl.length} ${wantsIntl.length === 1 ? 'person wants' : 'people want'} international.`,
       groups: [
-        { label: 'Wants nightlife', people: wantsNightlife.map(({ participant }) => participant.name) },
-        { label: 'Dealbreaker: too much nightlife', people: avoidsNightlife.map(({ participant }) => participant.name) },
+        { label: 'National', people: wantsNational.map(({ participant }) => participant.name) },
+        { label: 'International', people: wantsIntl.map(({ participant }) => participant.name) },
       ],
     })
   }
@@ -128,15 +177,21 @@ export function computeConflicts(participants, responsesByParticipant) {
   return conflicts
 }
 
-function overlapScore(a = [], b = []) {
-  if (!a.length || !b.length) return 0
-  const setB = new Set(b)
-  const hits = a.filter((x) => setB.has(x)).length
-  return hits / a.length
+// "Culture" (shown in the UI) maps to the catalog's "Cultural" tag.
+function catalogTypeAliases(t) {
+  if (t === 'Culture') return ['Culture', 'Cultural']
+  return [t]
+}
+
+function overlapScore(selected = [], catalogTypes = []) {
+  if (!selected.length || !catalogTypes.length) return 0
+  const setB = new Set(catalogTypes)
+  const hits = selected.filter((x) => catalogTypeAliases(x).some((alias) => setB.has(alias))).length
+  return hits / selected.length
 }
 
 // Evaluates how a single destination fits one participant's response,
-// treating deal-breakers and a hard budget limit as constraints that a
+// treating deal-breakers and the hard budget ceiling as constraints that a
 // majority preference cannot simply override.
 export function fitForDestination(destination, response) {
   const reasons = []
@@ -146,7 +201,7 @@ export function fitForDestination(destination, response) {
   if (!response.destination_no_pref) {
     const s = overlapScore(response.destination_types, destination.types)
     score += s * 3
-    if (s > 0) reasons.push({ ok: true, text: `Matches your destination-type preference` })
+    if (s > 0) reasons.push({ ok: true, text: 'Matches the kind of trip you want' })
   }
 
   if (response.trip_scope === 'international') {
@@ -164,35 +219,29 @@ export function fitForDestination(destination, response) {
       reasons.push({ ok: 'warn', text: 'You wanted a domestic trip — this one is international' })
     }
   }
-  if (!response.activities_no_pref) {
-    const s = overlapScore(response.activities, destination.activities)
-    score += s * 3
-    if (s > 0) reasons.push({ ok: true, text: `Good overlap on activities` })
-  }
-  if (!response.vibes_no_pref) {
-    const s = overlapScore(response.vibes, destination.vibes)
-    score += s * 2
-    if (s > 0) reasons.push({ ok: true, text: `Matches the trip vibe you want` })
-  }
-  if (!response.no_specific_destination && (response.specific_destinations || []).some((d) => d.toLowerCase().includes(destination.name.split(',')[0].toLowerCase()))) {
-    score += 5
-    reasons.push({ ok: true, text: 'This is a place you specifically asked for' })
+
+  if (response.pace === 'packed' && destination.vibes.includes('Packed')) {
+    score += 1.5
+    reasons.push({ ok: true, text: 'Matches the packed pace you want' })
+  } else if (response.pace === 'slow' && destination.vibes.some((v) => ['Slow', 'Relaxed'].includes(v))) {
+    score += 1.5
+    reasons.push({ ok: true, text: 'Matches the slow pace you want' })
+  } else if (response.pace === 'packed' && destination.vibes.some((v) => ['Slow', 'Relaxed'].includes(v))) {
+    reasons.push({ ok: 'warn', text: 'This place tends to be slower-paced than you want' })
+  } else if (response.pace === 'slow' && destination.vibes.includes('Packed')) {
+    reasons.push({ ok: 'warn', text: 'This place tends to be more packed than you want' })
   }
 
-  // Budget — hard constraint if the participant marked a hard limit.
-  const ceiling = response.budget_ceiling || response.budget_max
+  // Budget — a hard ceiling by design (per-person max, per the fairness rule
+  // that a majority preference must not override someone's hard limit).
+  const ceiling = response.budget_ceiling
   if (ceiling) {
     if (destination.budgetMin > ceiling) {
-      if (response.budget_hard_limit) {
-        level = 'red'
-        reasons.push({ ok: false, text: `Exceeds your hard budget limit (₹${ceiling.toLocaleString('en-IN')})` })
-      } else {
-        if (level !== 'red') level = 'yellow'
-        reasons.push({ ok: 'warn', text: `Above your comfortable budget, though not a hard limit` })
-      }
-    } else if (response.budget_max && destination.budgetMax > response.budget_max) {
+      level = 'red'
+      reasons.push({ ok: false, text: `Exceeds your maximum budget (₹${ceiling.toLocaleString('en-IN')})` })
+    } else if (destination.budgetMax > ceiling) {
       if (level !== 'red') level = 'yellow'
-      reasons.push({ ok: 'warn', text: `Slightly above your comfortable budget range` })
+      reasons.push({ ok: 'warn', text: 'Close to your maximum budget' })
     } else {
       reasons.push({ ok: true, text: 'Budget works' })
       score += 2
@@ -206,44 +255,20 @@ export function fitForDestination(destination, response) {
     reasons.push({ ok: 'warn', text: 'Longer travel than you said you prefer' })
   }
 
-  // Deal-breakers — always hard constraints.
+  // Deal-breakers — always hard constraints where we have data to check them.
   const dbs = response.no_dealbreakers ? [] : (response.dealbreakers || [])
   for (const db of dbs) {
     if (db === 'Exceeds my budget' && ceiling && destination.budgetMin > ceiling) {
       level = 'red'
       reasons.push({ ok: false, text: 'Dealbreaker: exceeds your budget' })
     }
-    if (db === 'Too much travel' && destination.travelTimeHours > 8) {
+    if (db === 'No long drives' && destination.travelModes.includes('Road') && destination.travelTimeHours > 6) {
       level = 'red'
-      reasons.push({ ok: false, text: 'Dealbreaker: too much travel' })
+      reasons.push({ ok: false, text: 'Dealbreaker: this is a long drive' })
     }
-    if (db === 'Too much nightlife' && (destination.vibes.includes('Party-focused') || destination.activities.includes('Nightlife'))) {
+    if (db === 'No trekking' && destination.activities.includes('Trekking')) {
       level = 'red'
-      reasons.push({ ok: false, text: 'Dealbreaker: too much nightlife' })
-    }
-    if (db === 'Too little nightlife' && !destination.activities.includes('Nightlife')) {
-      if (level !== 'red') level = 'yellow'
-      reasons.push({ ok: 'warn', text: "Not much nightlife here — you wanted some" })
-    }
-    if (db === 'Too much trekking' && destination.activities.includes('Trekking') && destination.vibes.includes('Adventure-heavy')) {
-      level = 'red'
-      reasons.push({ ok: false, text: 'Dealbreaker: too much trekking' })
-    }
-    if (db === 'Too hectic' && destination.vibes.includes('Packed')) {
-      level = 'red'
-      reasons.push({ ok: false, text: 'Dealbreaker: too hectic' })
-    }
-    if (db === 'Too relaxed' && destination.vibes.length && destination.vibes.every((v) => ['Relaxed', 'Slow'].includes(v))) {
-      level = 'red'
-      reasons.push({ ok: false, text: 'Dealbreaker: too relaxed for you' })
-    }
-    if (db === 'International travel' && !destination.domestic) {
-      level = 'red'
-      reasons.push({ ok: false, text: "Dealbreaker: it's international travel" })
-    }
-    if (db === 'Domestic travel' && destination.domestic) {
-      level = 'red'
-      reasons.push({ ok: false, text: "Dealbreaker: it's domestic travel" })
+      reasons.push({ ok: false, text: 'Dealbreaker: this place is trekking-heavy' })
     }
   }
 
@@ -263,9 +288,8 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     }))
     const groupScore = fits.reduce((sum, f) => sum + f.score, 0) / fits.length
     const reds = fits.filter((f) => f.level === 'red').length
-    const yellows = fits.filter((f) => f.level === 'yellow').length
     const greens = fits.filter((f) => f.level === 'green').length
-    return { destination, fits, groupScore, reds, yellows, greens }
+    return { destination, fits, groupScore, reds, greens }
   })
 
   scored.sort((a, b) => {
@@ -294,15 +318,12 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
 
 function buildOptionSummary({ destination, fits, reds, greens }) {
   const strengths = []
-  const consensusTypeHits = fits.filter((f) => f.reasons.some((r) => r.ok === true && r.text.includes('destination-type'))).length
 
-  if (greens >= Math.ceil(fits.length * 0.6)) strengths.push('Matches most people’s destination preferences')
+  if (greens >= Math.ceil(fits.length * 0.6)) strengths.push('Matches most people’s idea of the trip')
   const budgetOk = fits.filter((f) => !f.reasons.some((r) => r.text.toLowerCase().includes('budget') && r.ok !== true)).length
   if (budgetOk >= Math.ceil(fits.length * 0.6)) strengths.push('Fits the majority’s budget')
-  const activityOverlap = fits.filter((f) => f.reasons.some((r) => r.ok === true && r.text.includes('activities'))).length
-  if (activityOverlap >= Math.ceil(fits.length * 0.5)) strengths.push('Strong activity overlap')
-  const vibeOverlap = fits.filter((f) => f.reasons.some((r) => r.ok === true && r.text.includes('vibe'))).length
-  if (vibeOverlap >= Math.ceil(fits.length * 0.5)) strengths.push('Matches the trip vibe most people want')
+  const paceOverlap = fits.filter((f) => f.reasons.some((r) => r.ok === true && r.text.includes('pace'))).length
+  if (paceOverlap >= Math.ceil(fits.length * 0.5)) strengths.push('Matches the pace most people want')
 
   const whoCompromises = fits.filter((f) => f.level === 'yellow').map((f) => f.participant.name)
   const whoBlocked = fits.filter((f) => f.level === 'red').map((f) => f.participant.name)

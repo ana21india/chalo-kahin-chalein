@@ -1,35 +1,41 @@
-export const DESTINATION_TYPES = [
-  'Beach', 'Mountains', 'City', 'Nature', 'Adventure', 'Cultural', 'Relaxation', 'Nightlife',
-]
-
 export const TRIP_SCOPE_OPTIONS = [
   { value: 'national', label: 'National', hint: 'Within India' },
   { value: 'international', label: 'International', hint: 'Outside India' },
   { value: 'either', label: 'Either works for me', hint: 'No strong preference' },
 ]
 
-export const ACTIVITIES = [
-  'Food', 'Nightlife', 'Trekking', 'Water sports', 'Sightseeing', 'Shopping',
-  'Cafés', 'Adventure', 'Wellness', 'Road trips', 'Culture', 'Relaxing',
-]
-
-export const VIBES = [
-  'Relaxed', 'Adventure-heavy', 'Packed', 'Slow', 'Spontaneous', 'Planned',
-  'Party-focused', 'Food-focused', 'Luxury', 'Budget-friendly',
+// "Culture" is what we show; it maps to the catalog's "Cultural" tag.
+export const TRIP_TYPE_OPTIONS = [
+  'Beach', 'Mountains', 'City', 'Culture', 'Adventure', 'Relaxation',
 ]
 
 export const DEALBREAKERS = [
+  'No trekking',
+  'No red-eye flights',
+  'No long drives',
+  'Food restrictions',
   'Exceeds my budget',
   "Doesn't work with my dates",
-  'Too much travel',
-  'Too much nightlife',
-  'Too little nightlife',
-  'Too much trekking',
-  'Too hectic',
-  'Too relaxed',
-  'Shared accommodation',
-  'International travel',
-  'Domestic travel',
+]
+
+export const BUDGET_SCOPE_OPTIONS = [
+  { value: 'whole_trip', label: 'Whole trip' },
+  { value: 'excluding_flights', label: 'Excluding flights' },
+]
+
+export const PACE_OPTIONS = [
+  { value: 'packed', label: 'Packed' },
+  { value: 'slow', label: 'Slow' },
+]
+
+export const STAY_OPTIONS = [
+  { value: 'hotel', label: 'Hotel' },
+  { value: 'rental', label: 'Rental (Airbnb-style)' },
+]
+
+export const ROOM_OPTIONS = [
+  { value: 'shared', label: 'Shared rooms' },
+  { value: 'separate', label: 'Separate rooms' },
 ]
 
 export const TRAVEL_MODES = ['Flight', 'Train', 'Road', 'Anything']
@@ -56,12 +62,6 @@ export const DATE_FLEXIBILITY_OPTIONS = [
   { value: 'fixed', label: 'These dates only' },
   { value: 'flexible', label: 'A few days either way' },
   { value: 'very_flexible', label: 'Very flexible' },
-]
-
-export const PHASES = [
-  { key: 'destinationType', title: 'Destination type', question: 'What kind of place do you want?', options: DESTINATION_TYPES },
-  { key: 'activities', title: 'Activities', question: 'What do you want to do?', options: ACTIVITIES },
-  { key: 'vibe', title: 'Trip vibe', question: 'What kind of trip are you looking for?', options: VIBES },
 ]
 
 export function participantStorageKey(tripId) {

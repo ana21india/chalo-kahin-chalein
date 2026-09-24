@@ -4,7 +4,12 @@ import { ChevronDown, ChevronUp, AlertTriangle, Vote as VoteIcon } from 'lucide-
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
-import { completionCounts, groupConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
+import { completionCounts, groupConsensus, singleFieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
+import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS } from '../lib/constants'
+
+function labelMapFrom(options) {
+  return Object.fromEntries(options.map((o) => [o.value, o.label]))
+}
 
 const TABS = ['Consensus', 'Conflicts', 'Options', 'Decide']
 
@@ -123,16 +128,22 @@ function ConsensusRow({ label, items }) {
 }
 
 function ConsensusTab({ participants, responses }) {
+  const scope = singleFieldConsensus(participants, responses, 'trip_scope', labelMapFrom(TRIP_SCOPE_OPTIONS))
   const destination = groupConsensus(participants, responses, 'destination_types', 'destination_no_pref')
-  const activities = groupConsensus(participants, responses, 'activities', 'activities_no_pref')
-  const vibes = groupConsensus(participants, responses, 'vibes', 'vibes_no_pref')
+  const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS))
+  const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS))
+  const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS))
   return (
     <Card className="p-5">
-      <ConsensusRow label="Destination type" items={destination} />
+      <ConsensusRow label="National or international" items={scope} />
       <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Activities" items={activities} />
+      <ConsensusRow label="Kind of trip" items={destination} />
       <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Trip vibe" items={vibes} />
+      <ConsensusRow label="Pace" items={pace} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Stay" items={stay} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Rooms" items={rooms} />
       <p className="text-[11px] text-neutral-400 mt-4">People who chose "no preference" aren't counted here — it's never treated as opposition.</p>
     </Card>
   )

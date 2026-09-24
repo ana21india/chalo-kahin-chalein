@@ -2,10 +2,10 @@ import React, { useState } from 'react'
 import { Plus, X, Check } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-const FUNNY_MAX_HINTS = [
-  'You can pick only 3. Yes, even though you love everything.',
-  "That's the max — pick your top 3 and let the rest go.",
-  '3 max. We are trying to avoid another 1,200-message discussion.',
+const funnyMaxHints = (max) => [
+  `You can pick only ${max}. Yes, even though you love everything.`,
+  `That's the max — pick your top ${max} and let the rest go.`,
+  `${max} max. We are trying to avoid another 1,200-message discussion.`,
 ]
 
 export default function ChipSelect({ options, selected, onChange, noPreference, onNoPreferenceChange, max = 3, allowCustom = true }) {
@@ -46,7 +46,7 @@ export default function ChipSelect({ options, selected, onChange, noPreference, 
           {noPreference ? 'No preference selected' : `${selected.length} / ${max} selected`}
         </span>
         {atMax && !noPreference && (
-          <span className="text-xs text-sunset-500 font-medium">{FUNNY_MAX_HINTS[options.length % FUNNY_MAX_HINTS.length]}</span>
+          <span className="text-xs text-sunset-500 font-medium">{funnyMaxHints(max)[options.length % 3]}</span>
         )}
       </div>
 
