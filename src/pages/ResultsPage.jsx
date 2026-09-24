@@ -5,7 +5,7 @@ import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
 import { completionCounts, groupConsensus, singleFieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
-import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS } from '../lib/constants'
+import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS } from '../lib/constants'
 
 function labelMapFrom(options) {
   return Object.fromEntries(options.map((o) => [o.value, o.label]))
@@ -134,11 +134,14 @@ function ConsensusTab({ participants, responses }) {
   const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS))
   const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS))
   const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS))
+  const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS))
   return (
     <Card className="p-5">
       <ConsensusRow label="National or international" items={scope} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Kind of trip" items={places} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Travel time" items={travelTime} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Pace" items={pace} />
       <div className="h-px bg-neutral-100 my-4" />
