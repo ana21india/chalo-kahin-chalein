@@ -40,6 +40,8 @@ export default function CoordinatorDashboardPage() {
 
   const counts = completionCounts(participants, responses)
   const inviteLink = `${window.location.origin}/trip/${tripId}`
+  const myResponse = participant?.id ? responses[participant.id] : null
+  const myStatus = myResponse?.status || 'not_started'
 
   function copyLink() {
     navigator.clipboard.writeText(inviteLink)
@@ -51,6 +53,23 @@ export default function CoordinatorDashboardPage() {
     <Screen>
       <TopBar title={trip.name} subtitle={`Created by ${trip.coordinator_name}`} />
       <div className="flex-1 px-5 py-4 space-y-4 overflow-y-auto pb-10">
+        <Card className="p-5">
+          <div className="flex items-center gap-3">
+            {myStatus === 'completed' ? <CheckCircle2 className="text-emerald-500" size={28} /> : <Circle className="text-neutral-300" size={28} />}
+            <div>
+              <div className="font-bold text-neutral-900">
+                {myStatus === 'completed' ? 'Your preferences are in' : myStatus === 'in_progress' ? 'You started, but haven’t finished' : "Don't forget your own preferences"}
+              </div>
+              <div className="text-xs text-neutral-500 mt-0.5">
+                {myStatus === 'completed' ? 'You can still edit them any time.' : "You're going on this trip too — takes about 2 minutes."}
+              </div>
+            </div>
+          </div>
+          <Button onClick={() => navigate(`/trip/${tripId}/preferences`)} className="w-full mt-4" size="lg">
+            {myStatus === 'completed' ? 'Edit my preferences' : myStatus === 'in_progress' ? 'Continue' : 'Start'}
+          </Button>
+        </Card>
+
         <Card className="p-5">
           <div className="text-sm font-bold text-neutral-800 mb-1">Invite your group</div>
           <p className="text-xs text-neutral-400 mb-3">Share this link with everyone going on the trip.</p>
