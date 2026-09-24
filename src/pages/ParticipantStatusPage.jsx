@@ -61,13 +61,15 @@ export default function ParticipantStatusPage() {
                 {myStatus === 'completed' ? 'You’re all set' : myStatus === 'in_progress' ? 'You started, but haven’t finished' : 'You haven’t submitted yet'}
               </div>
               <div className="text-xs text-neutral-500 mt-0.5">
-                {myStatus === 'completed' ? 'You can still edit your preferences any time.' : 'Takes about 2 minutes.'}
+                {myStatus === 'completed' ? 'Submitted — ask your coordinator if you need to change anything.' : 'Takes about 2 minutes.'}
               </div>
             </div>
           </div>
-          <Button onClick={() => navigate(`/trip/${tripId}/preferences`)} className="w-full mt-4" size="lg">
-            {myStatus === 'completed' ? 'Edit my preferences' : myStatus === 'in_progress' ? 'Continue' : 'Start'}
-          </Button>
+          {myStatus !== 'completed' && (
+            <Button onClick={() => navigate(`/trip/${tripId}/preferences`)} className="w-full mt-4" size="lg">
+              {myStatus === 'in_progress' ? 'Continue' : 'Start'}
+            </Button>
+          )}
         </Card>
 
         <Card className="p-5">

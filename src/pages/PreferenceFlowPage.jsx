@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Check, X, Plus } from 'lucide-react'
 import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../components/ui'
 import ChipSelect from '../components/ChipSelect'
@@ -8,7 +8,7 @@ import {
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
 } from '../lib/constants'
-import { getTrip, getResponse, upsertResponse } from '../lib/api'
+import { getTrip, getResponse, getParticipant, upsertResponse } from '../lib/api'
 
 const STEPS = ['tripScope', 'destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
 const today = new Date().toISOString().slice(0, 10)
@@ -41,9 +41,14 @@ const emptyForm = {
 export default function PreferenceFlowPage() {
   const { tripId } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const participant = getStoredParticipant(tripId)
+  const asParticipantId = searchParams.get('as')
+  const editingOther = Boolean(asParticipantId && participant?.isCoordinator && asParticipantId !== participant?.id)
+  const targetId = editingOther ? asParticipantId : participant?.id
 
   const [trip, setTrip] = useState(null)
+  const [targetName, setTargetName] = useState('')
   const [step, setStep] = useState(0)
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(true)
@@ -54,9 +59,22 @@ export default function PreferenceFlowPage() {
       navigate(`/trip/${tripId}/join`, { replace: true })
       return
     }
-    Promise.all([getTrip(tripId), getResponse(participant.id)]).then(([t, r]) => {
+    if (asParticipantId && !participant.isCoordinator) {
+      navigate(`/trip/${tripId}/status`, { replace: true })
+      return
+    }
+    Promise.all([
+      getTrip(tripId),
+      getResponse(targetId),
+      editingOther ? getParticipant(targetId) : Promise.resolve(null),
+    ]).then(([t, r, targetParticipant]) => {
       setTrip(t)
+      if (targetParticipant) setTargetName(targetParticipant.name)
       if (r) {
+        if (r.status === 'completed' && !editingOther && !participant.isCoordinator) {
+          navigate(`/trip/${tripId}/status`, { replace: true })
+          return
+        }
         const loaded = { ...emptyForm, ...r }
         for (const key of INTEGER_FIELDS) if (loaded[key] === null || loaded[key] === undefined) loaded[key] = ''
         for (const key of DATE_FIELDS) if (loaded[key] === null || loaded[key] === undefined) loaded[key] = ''
@@ -68,7 +86,7 @@ export default function PreferenceFlowPage() {
       }
       setLoading(false)
     })
-  }, [tripId])
+  }, [tripId, targetId])
 
   function set(patch) {
     setForm((f) => ({ ...f, ...patch }))
@@ -77,7 +95,7 @@ export default function PreferenceFlowPage() {
   async function persist(status) {
     setSaving(true)
     try {
-      await upsertResponse(tripId, participant.id, { ...sanitizeForm(form), status: status || 'in_progress' })
+      await upsertResponse(tripId, targetId, { ...sanitizeForm(form), status: status || 'in_progress' })
     } finally {
       setSaving(false)
     }
@@ -94,7 +112,7 @@ export default function PreferenceFlowPage() {
 
   async function handleSubmit() {
     await persist('completed')
-    navigate(`/trip/${tripId}/status`)
+    navigate(editingOther ? `/trip/${tripId}/dashboard` : `/trip/${tripId}/status`)
   }
 
   if (loading || !trip) {
@@ -112,6 +130,11 @@ export default function PreferenceFlowPage() {
   return (
     <Screen>
       <TopBar onBack={goBack} />
+      {editingOther && (
+        <div className="mx-5 mb-1 px-3 py-2 rounded-xl bg-lagoon-50 border border-lagoon-200 text-xs font-semibold text-lagoon-700">
+          Editing on behalf of {targetName || 'this participant'}
+        </div>
+      )}
       <ProgressDots step={step} total={STEPS.length} />
       <div className="flex-1 px-5 pt-5 pb-28 overflow-y-auto">
         {current === 'tripScope' && (
