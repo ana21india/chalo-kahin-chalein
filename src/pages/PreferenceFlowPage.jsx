@@ -142,14 +142,14 @@ export default function PreferenceFlowPage() {
         )}
         {current === 'destinationPick' && (
           <div>
-            <PhaseHeader title="What kind of place do you want?" subtitle="Pick up to 2." />
+            <PhaseHeader title="What kind of place do you want?" subtitle="Pick up to 3." />
             <ChipSelect
               options={TRIP_TYPE_OPTIONS}
               selected={form.destination_types}
               onChange={(v) => set({ destination_types: v })}
               noPreference={form.destination_no_pref}
               onNoPreferenceChange={(v) => set({ destination_no_pref: v, destination_types: v ? [] : form.destination_types })}
-              max={2}
+              max={3}
               allowCustom={false}
             />
           </div>
