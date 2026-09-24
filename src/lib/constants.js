@@ -13,18 +13,42 @@ export const MAJOR_CITIES = [
   'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Kochi', 'Lucknow',
 ]
 
+// "Exceeds my budget" and "Doesn't work with my dates" are deliberately not
+// here — budget firmness and date flexibility each capture that directly,
+// so a checkbox here would just be the same fact asked a second time with a
+// second, possibly contradictory answer.
 export const DEALBREAKERS = [
   'No trekking',
   'No red-eye flights',
   'No long drives',
   'Food restrictions',
-  'Exceeds my budget',
-  "Doesn't work with my dates",
 ]
 
 export const BUDGET_SCOPE_OPTIONS = [
   { value: 'whole_trip', label: 'Whole trip' },
   { value: 'excluding_flights', label: 'Excluding flights' },
+]
+
+export const BUDGET_FLEXIBILITY_OPTIONS = [
+  { value: 'strict', label: 'Strict', hint: 'Cannot exceed this' },
+  { value: 'somewhat_flexible', label: 'Somewhat flexible', hint: 'Can stretch ~10-15%' },
+  { value: 'flexible', label: 'Flexible', hint: 'Willing to spend more for the right trip' },
+]
+
+export const DAYS_FLEXIBILITY_OPTIONS = [
+  { value: 'fixed', label: 'Fixed availability', hint: 'This is exactly what I have' },
+  { value: 'target', label: 'Rough target', hint: 'Could extend or shorten' },
+]
+
+export const SCOPE_FIRMNESS_OPTIONS = [
+  { value: 'preferred', label: 'Preferred' },
+  { value: 'strong', label: 'Strong preference' },
+  { value: 'non_negotiable', label: 'Non-negotiable' },
+]
+
+export const TRAVEL_TIME_FIRMNESS_OPTIONS = [
+  { value: 'hard', label: 'Hard limit' },
+  { value: 'preference', label: 'Preference' },
 ]
 
 export const PACE_OPTIONS = [

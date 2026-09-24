@@ -181,8 +181,14 @@ function ConflictsTab({ conflicts }) {
   )
 }
 
+const CONFLICT_HEADINGS = {
+  date: 'No common travel window yet',
+  scope: 'National vs. international is a deadlock',
+  duration: 'No trip length works for everyone yet',
+}
+
 function OptionsTab({ optionsResult, counts }) {
-  const { dateConflict, message, options } = optionsResult
+  const { dateConflict, conflictType, message, options } = optionsResult
   const [expanded, setExpanded] = useState(options[0]?.name || null)
 
   if (dateConflict) {
@@ -190,7 +196,7 @@ function OptionsTab({ optionsResult, counts }) {
       <Card className="p-5">
         <div className="flex items-center gap-2 mb-2">
           <AlertTriangle size={16} className="text-amber-500" />
-          <span className="font-bold text-neutral-900 text-sm">No common travel window yet</span>
+          <span className="font-bold text-neutral-900 text-sm">{CONFLICT_HEADINGS[conflictType] || 'Not enough alignment yet'}</span>
         </div>
         <p className="text-sm text-neutral-600">{message}</p>
       </Card>

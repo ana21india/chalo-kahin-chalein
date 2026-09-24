@@ -226,23 +226,43 @@ function commonDateWindow(entries) {
 }
 
 // Hard constraints that eliminate a destination for one person — never
-// compensated for by a high preference score elsewhere.
+// compensated for by a high preference score elsewhere. Budget and travel
+// time only block when the person marked them firmly (strict / hard limit);
+// a "somewhat flexible" or "flexible" budget, or a "preference" travel-time
+// cap, is scored instead of eliminating — see computeFitDetails.
 function hardConstraintCheck(destination, response) {
   const reasons = []
   let blocked = false
 
   const dbs = response.no_dealbreakers ? [] : (response.dealbreakers || [])
   const ceiling = response.budget_ceiling
-  if (dbs.includes('Exceeds my budget') && ceiling && destination.budgetMin > ceiling) {
-    blocked = true
-    reasons.push(`Dealbreaker: exceeds your budget (₹${ceiling.toLocaleString('en-IN')})`)
+  const budgetFlex = response.budget_flexibility || 'strict'
+  if (ceiling) {
+    const effectiveCeiling = budgetFlex === 'somewhat_flexible' ? ceiling * 1.15 : ceiling
+    if (budgetFlex !== 'flexible' && destination.budgetMin > effectiveCeiling) {
+      blocked = true
+      reasons.push(`Exceeds your ${budgetFlex === 'strict' ? 'strict' : 'stretched'} maximum budget (₹${ceiling.toLocaleString('en-IN')})`)
+    }
   }
 
-  if (response.travel_time_max && response.travel_time_max !== 'no_limit') {
+  if (response.travel_time_max && response.travel_time_max !== 'no_limit' && (response.travel_time_firmness || 'preference') === 'hard') {
     const maxHours = travelTimeMaxHours(response.travel_time_max)
     if (destination.travelTimeHours > maxHours) {
       blocked = true
-      reasons.push('Travel time is longer than your stated maximum')
+      reasons.push('Travel time is longer than your hard limit')
+    }
+  }
+
+  // A non-negotiable national/international answer is a personal hard
+  // constraint for this person specifically, even though scope is normally
+  // a group-consensus signal, not a per-person block (see scopeConsensus).
+  if (response.scope_firmness === 'non_negotiable') {
+    if (response.trip_scope === 'national' && !destination.domestic) {
+      blocked = true
+      reasons.push('You said national is non-negotiable — this is international')
+    } else if (response.trip_scope === 'international' && destination.domestic) {
+      blocked = true
+      reasons.push('You said international is non-negotiable — this is domestic')
     }
   }
 
@@ -272,6 +292,9 @@ function computeFitDetails(destination, response) {
   if (response.budget_ceiling) {
     const range = destination.budgetMax - destination.budgetMin || 1
     budgetFit = clamp01((response.budget_ceiling - destination.budgetMin) / range)
+    const flex = response.budget_flexibility || 'strict'
+    if (flex === 'flexible') budgetFit = Math.max(budgetFit, 0.65)
+    else if (flex === 'somewhat_flexible') budgetFit = Math.max(budgetFit, 0.45)
   }
 
   let travelFit = 1
@@ -331,7 +354,7 @@ export function fitForDestination(destination, response) {
     }
   }
   if (!hc.blocked && details.budgetFit >= 0.7) reasons.push({ ok: true, text: 'Comfortably within your budget' })
-  else if (!hc.blocked && response.budget_ceiling && details.budgetFit < 0.4) reasons.push({ ok: 'warn', text: 'Above your comfortable budget, though not your stated dealbreaker' })
+  else if (!hc.blocked && response.budget_ceiling && details.budgetFit < 0.55) reasons.push({ ok: 'warn', text: `Above your ${response.budget_flexibility === 'flexible' ? 'usual' : 'comfortable'} budget, but you said you're flexible` })
   if (response.travel_time_max && response.travel_time_max !== 'no_limit' && details.travelFit < 0.7) {
     reasons.push({ ok: 'warn', text: 'Longer travel than you’d ideally want' })
   }
@@ -388,25 +411,59 @@ function scoreDestination(destination, entries) {
   return { destination, fits, reds, score100, avgPreferenceFit, minPreferenceFit, groupCompatibility, primaryAxis }
 }
 
+function firmnessWeight(firmness) {
+  switch (firmness) {
+    case 'non_negotiable': return 2
+    case 'strong': return 1.5
+    default: return 1
+  }
+}
+
 // Group's national/international consensus. Excludes people who said
 // "either" from the denominator — they don't push the group either way,
-// but they don't get counted against a direction either.
+// but they don't get counted against a direction either. Firmer answers
+// (strong preference / non-negotiable) pull the consensus harder than a
+// merely "preferred" answer.
 function scopeConsensus(entries) {
-  const national = entries.filter(({ response }) => response.trip_scope === 'national').length
-  const international = entries.filter(({ response }) => response.trip_scope === 'international').length
+  let national = 0
+  let international = 0
+  for (const { response } of entries) {
+    const w = firmnessWeight(response.scope_firmness)
+    if (response.trip_scope === 'national') national += w
+    else if (response.trip_scope === 'international') international += w
+  }
   const total = national + international
   if (total === 0) return { direction: null, minority: null, majorityPct: 0 }
   const nationalPct = national / total
   const direction = nationalPct >= 0.5 ? 'national' : 'international'
   const majorityPct = Math.max(nationalPct, 1 - nationalPct)
   const minority = direction === 'national' ? 'international' : 'national'
-  const minorityCount = direction === 'national' ? international : national
-  return { direction, minority, majorityPct, minorityCount, total }
+  return { direction, minority, majorityPct, total }
 }
 
 function matchesScope(destination, direction) {
   if (!direction) return true
   return direction === 'national' ? destination.domestic : !destination.domestic
+}
+
+// True hard constraint: two travellers who both say their scope is
+// non-negotiable, in opposite directions, cannot be reconciled by any
+// destination — the group can't travel together until one of them budges.
+function scopeConflict(entries) {
+  const nonNegNational = entries.some(({ response }) => response.trip_scope === 'national' && response.scope_firmness === 'non_negotiable')
+  const nonNegIntl = entries.some(({ response }) => response.trip_scope === 'international' && response.scope_firmness === 'non_negotiable')
+  return nonNegNational && nonNegIntl
+}
+
+// True hard constraint: two travellers who both marked their days as fixed
+// availability (not a rough target) with non-overlapping ranges can't
+// actually travel together for any single trip length.
+function durationConflict(entries) {
+  const fixed = entries.filter(({ response }) => response.days_flexibility === 'fixed' && (response.min_days || response.max_days))
+  if (fixed.length < 2) return false
+  const lowestMax = Math.min(...fixed.map(({ response }) => response.max_days || response.min_days || Infinity))
+  const highestMin = Math.max(...fixed.map(({ response }) => response.min_days || response.max_days || 0))
+  return highestMin > lowestMax
 }
 
 // Produces 2-3 viable destinations with full group scoring and explanations,
@@ -419,7 +476,26 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
   if (!dateWindow.exists) {
     return {
       dateConflict: true,
+      conflictType: 'date',
       message: 'The group’s stated dates don’t overlap at all, even accounting for flexibility — there’s currently no common travel window, so no destinations can be recommended yet.',
+      options: [],
+    }
+  }
+
+  if (scopeConflict(entries)) {
+    return {
+      dateConflict: true,
+      conflictType: 'scope',
+      message: 'At least one person marked national as non-negotiable and another marked international as non-negotiable — no destination can satisfy both. The group needs to resolve this before options can be shown.',
+      options: [],
+    }
+  }
+
+  if (durationConflict(entries)) {
+    return {
+      dateConflict: true,
+      conflictType: 'duration',
+      message: 'At least two people marked their available days as fixed, and those ranges don’t overlap — there’s no trip length that works for everyone yet.',
       options: [],
     }
   }

@@ -7,6 +7,7 @@ import {
   TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
+  BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS, SCOPE_FIRMNESS_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS,
 } from '../lib/constants'
 import { getTrip, getResponse, getParticipant, upsertResponse } from '../lib/api'
 
@@ -29,11 +30,11 @@ function sanitizeForm(form) {
 }
 
 const emptyForm = {
-  trip_scope: 'either',
+  trip_scope: 'either', scope_firmness: 'preferred',
   destination_types: [], destination_no_pref: false,
-  budget_ceiling: '', budget_includes_flights: 'whole_trip',
-  date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '',
-  starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit',
+  budget_ceiling: '', budget_includes_flights: 'whole_trip', budget_flexibility: 'strict',
+  date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '', days_flexibility: 'target',
+  starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit', travel_time_firmness: 'preference',
   pace: '', stay_type: '', room_sharing: '',
   dealbreakers: [], no_dealbreakers: false,
 }
@@ -82,6 +83,10 @@ export default function PreferenceFlowPage() {
         if (!loaded.stay_type) loaded.stay_type = ''
         if (!loaded.room_sharing) loaded.room_sharing = ''
         if (!loaded.starting_city) loaded.starting_city = ''
+        if (!loaded.scope_firmness) loaded.scope_firmness = 'preferred'
+        if (!loaded.budget_flexibility) loaded.budget_flexibility = 'strict'
+        if (!loaded.days_flexibility) loaded.days_flexibility = 'target'
+        if (!loaded.travel_time_firmness) loaded.travel_time_firmness = 'preference'
         setForm(loaded)
       }
       setLoading(false)
@@ -138,7 +143,12 @@ export default function PreferenceFlowPage() {
       <ProgressDots step={step} total={STEPS.length} />
       <div className="flex-1 px-5 pt-5 pb-28 overflow-y-auto">
         {current === 'tripScope' && (
-          <TripScopePhase value={form.trip_scope} onChange={(v) => set({ trip_scope: v })} />
+          <TripScopePhase
+            value={form.trip_scope}
+            onChange={(v) => set({ trip_scope: v })}
+            firmness={form.scope_firmness}
+            onFirmnessChange={(v) => set({ scope_firmness: v })}
+          />
         )}
         {current === 'destinationPick' && (
           <div>
@@ -220,7 +230,7 @@ function AutocompleteInput({ value, onChange, options, placeholder, onCommit }) 
   )
 }
 
-function TripScopePhase({ value, onChange }) {
+function TripScopePhase({ value, onChange, firmness, onFirmnessChange }) {
   return (
     <div>
       <PhaseHeader title="National or international?" subtitle="Assuming everyone's passport/visa situation is sorted." />
@@ -237,6 +247,23 @@ function TripScopePhase({ value, onChange }) {
           </button>
         ))}
       </div>
+
+      {(value === 'national' || value === 'international') && (
+        <div className="mt-6">
+          <div className="text-sm font-bold text-neutral-800 mb-2.5">How firm is this?</div>
+          <div className="flex flex-col gap-2">
+            {SCOPE_FIRMNESS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onFirmnessChange(opt.value)}
+                className={`px-4 py-3 rounded-xl2 text-sm font-medium border text-left ${firmness === opt.value ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -259,6 +286,21 @@ function BudgetPhase({ form, set }) {
               className={`flex-1 py-3 rounded-xl2 text-sm font-semibold border ${form.budget_includes_flights === opt.value ? 'bg-sunset-500 border-sunset-500 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
             >
               {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <div className="text-sm font-bold text-neutral-800 mb-2.5">How firm is this number?</div>
+        <div className="flex flex-col gap-2">
+          {BUDGET_FLEXIBILITY_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => set({ budget_flexibility: opt.value })}
+              className={`px-4 py-3 rounded-xl2 text-sm font-medium border text-left ${form.budget_flexibility === opt.value ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
+            >
+              <div>{opt.label}</div>
+              <div className={`text-xs mt-0.5 ${form.budget_flexibility === opt.value ? 'text-white/80' : 'text-neutral-400'}`}>{opt.hint}</div>
             </button>
           ))}
         </div>
@@ -312,6 +354,21 @@ function DatesPhase({ form, set }) {
           <TextInput type="number" value={form.max_days} onChange={(v) => set({ max_days: v })} placeholder="Max days" />
         </div>
       </div>
+      <div>
+        <div className="text-sm font-bold text-neutral-800 mb-2.5">Is that your actual available time, or roughly what you're aiming for?</div>
+        <div className="flex flex-col gap-2">
+          {DAYS_FLEXIBILITY_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => set({ days_flexibility: opt.value })}
+              className={`px-4 py-3 rounded-xl2 text-sm font-medium border text-left ${form.days_flexibility === opt.value ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
+            >
+              <div>{opt.label}</div>
+              <div className={`text-xs mt-0.5 ${form.days_flexibility === opt.value ? 'text-white/80' : 'text-neutral-400'}`}>{opt.hint}</div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -357,6 +414,23 @@ function StartingPointPhase({ form, set }) {
           ))}
         </div>
       </div>
+
+      {form.travel_time_max !== 'no_limit' && (
+        <div>
+          <div className="text-sm font-bold text-neutral-800 mb-2.5">Is that a hard limit or a preference?</div>
+          <div className="flex gap-2">
+            {TRAVEL_TIME_FIRMNESS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => set({ travel_time_firmness: opt.value })}
+                className={`flex-1 py-3 rounded-xl2 text-sm font-semibold border ${form.travel_time_firmness === opt.value ? 'bg-sunset-500 border-sunset-500 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -465,7 +539,11 @@ function DealbreakersPhase({ form, set }) {
 
 function ReviewPhase({ form, onEdit }) {
   const scopeLabel = TRIP_SCOPE_OPTIONS.find((o) => o.value === form.trip_scope)?.label
+  const firmnessLabel = SCOPE_FIRMNESS_OPTIONS.find((o) => o.value === form.scope_firmness)?.label
   const budgetScopeLabel = BUDGET_SCOPE_OPTIONS.find((o) => o.value === form.budget_includes_flights)?.label
+  const budgetFlexLabel = BUDGET_FLEXIBILITY_OPTIONS.find((o) => o.value === form.budget_flexibility)?.label
+  const daysFlexLabel = DAYS_FLEXIBILITY_OPTIONS.find((o) => o.value === form.days_flexibility)?.label
+  const travelTimeFirmnessLabel = TRAVEL_TIME_FIRMNESS_OPTIONS.find((o) => o.value === form.travel_time_firmness)?.label
   const paceLabel = PACE_OPTIONS.find((o) => o.value === form.pace)?.label
   const stayLabel = STAY_OPTIONS.find((o) => o.value === form.stay_type)?.label
   const roomLabel = ROOM_OPTIONS.find((o) => o.value === form.room_sharing)?.label
@@ -475,7 +553,7 @@ function ReviewPhase({ form, onEdit }) {
       <PhaseHeader title="Here's what matters to you" subtitle="Double check everything before you submit." />
       <div className="space-y-3">
         <ReviewCard title="National or international" onEdit={() => onEdit(STEPS.indexOf('tripScope'))}>
-          {scopeLabel || 'Not set'}
+          {scopeLabel || 'Not set'}{(form.trip_scope === 'national' || form.trip_scope === 'international') ? ` · ${firmnessLabel}` : ''}
         </ReviewCard>
 
         <ReviewCard title="Kind of trip" onEdit={() => onEdit(STEPS.indexOf('destinationPick'))}>
@@ -483,16 +561,17 @@ function ReviewPhase({ form, onEdit }) {
         </ReviewCard>
 
         <ReviewCard title="Budget" onEdit={() => onEdit(STEPS.indexOf('budget'))}>
-          {form.budget_ceiling ? `Max ₹${form.budget_ceiling} (${budgetScopeLabel})` : 'Not set'}
+          {form.budget_ceiling ? `Max ₹${form.budget_ceiling} (${budgetScopeLabel}) · ${budgetFlexLabel}` : 'Not set'}
         </ReviewCard>
 
         <ReviewCard title="Dates & duration" onEdit={() => onEdit(STEPS.indexOf('datesAndDuration'))}>
           {form.date_range_start && form.date_range_end ? `${form.date_range_start} to ${form.date_range_end}` : 'Flexible'}
-          {form.min_days || form.max_days ? ` · ${form.min_days || '?'}–${form.max_days || '?'} days` : ''}
+          {form.min_days || form.max_days ? ` · ${form.min_days || '?'}–${form.max_days || '?'} days (${daysFlexLabel})` : ''}
         </ReviewCard>
 
         <ReviewCard title="Starting point" onEdit={() => onEdit(STEPS.indexOf('startingPoint'))}>
           {form.starting_city || 'City not set'} · {form.travel_mode} · {TRAVEL_TIME_OPTIONS.find((o) => o.value === form.travel_time_max)?.label}
+          {form.travel_time_max !== 'no_limit' ? ` (${travelTimeFirmnessLabel})` : ''}
         </ReviewCard>
 
         <ReviewCard title="Pace & stay" onEdit={() => onEdit(STEPS.indexOf('paceAndStay'))}>
