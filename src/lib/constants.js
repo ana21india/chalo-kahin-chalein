@@ -8,9 +8,33 @@ export const TRIP_TYPE_OPTIONS = [
   'Beach', 'Mountains', 'City', 'Parks & nature', 'Cultural', 'Adventure', 'Nightlife', 'Romantic',
 ]
 
+// A broad list of Indian cities for the starting-city autocomplete. The 12
+// metros used for travel-time estimation (see CITY_REGION in
+// travelTimes.js) are a curated subset of this — any other city here still
+// works as an answer, it just won't get a hard travel-time filter/estimate
+// since we have no route data for it (see estimateTravelHours).
 export const MAJOR_CITIES = [
   'Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Kolkata', 'Hyderabad',
   'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Kochi', 'Lucknow',
+  'Surat', 'Nagpur', 'Indore', 'Bhopal', 'Visakhapatnam', 'Vadodara',
+  'Coimbatore', 'Patna', 'Agra', 'Nashik', 'Faridabad', 'Meerut',
+  'Rajkot', 'Varanasi', 'Amritsar', 'Prayagraj', 'Ranchi', 'Guwahati',
+  'Thiruvananthapuram', 'Bhubaneswar', 'Ludhiana', 'Kanpur', 'Raipur',
+  'Dehradun', 'Mysuru', 'Madurai', 'Vijayawada', 'Jodhpur', 'Udaipur',
+  'Gurugram', 'Noida', 'Shimla', 'Manali', 'Srinagar', 'Jammu',
+  'Goa (Panaji)', 'Mangaluru', 'Nagercoil', 'Tiruchirappalli',
+  'Salem', 'Hubballi', 'Belagavi', 'Aurangabad',
+  'Gwalior', 'Jabalpur', 'Ujjain', 'Rourkela', 'Cuttack', 'Siliguri',
+  'Guntur', 'Nellore', 'Warangal', 'Tirupati', 'Puducherry',
+  'Dibrugarh', 'Shillong', 'Imphal', 'Agartala', 'Aizawl', 'Kohima',
+  'Itanagar', 'Gangtok', 'Port Blair', 'Leh', 'Rishikesh', 'Haridwar',
+  'Ajmer', 'Bikaner', 'Kota', 'Alwar', 'Gorakhpur', 'Bareilly',
+  'Moradabad', 'Aligarh', 'Jamshedpur', 'Dhanbad', 'Bokaro',
+  'Asansol', 'Durgapur', 'Howrah', 'Kollam', 'Kozhikode', 'Thrissur',
+  'Kottayam', 'Alappuzha', 'Vellore', 'Erode', 'Thanjavur',
+  'Rajahmundry', 'Kakinada', 'Anantapur', 'Bellary', 'Davanagere',
+  'Solapur', 'Kolhapur', 'Sangli', 'Thane', 'Navi Mumbai',
+  'Ghaziabad', 'Panipat', 'Karnal', 'Bathinda', 'Jalandhar', 'Patiala',
 ]
 
 // "Exceeds my budget" and "Doesn't work with my dates" are deliberately not

@@ -198,17 +198,19 @@ function PhaseHeader({ title, subtitle }) {
 
 function AutocompleteInput({ value, onChange, options, placeholder, onCommit }) {
   const [open, setOpen] = useState(false)
-  const filtered = options
-    .filter((o) => o.toLowerCase() !== (value || '').toLowerCase())
-    .filter((o) => !value || o.toLowerCase().includes(value.toLowerCase()))
-    .slice(0, 6)
+  const hasInput = (value || '').trim().length > 0
+  const filtered = hasInput
+    ? options
+        .filter((o) => o.toLowerCase() !== value.toLowerCase())
+        .filter((o) => o.toLowerCase().includes(value.toLowerCase()))
+        .slice(0, 6)
+    : []
 
   return (
     <div className="relative">
       <TextInput
         value={value}
         onChange={(v) => { onChange(v); setOpen(true) }}
-        onFocus={() => setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         onKeyDown={(e) => e.key === 'Enter' && onCommit && onCommit()}
         placeholder={placeholder}
