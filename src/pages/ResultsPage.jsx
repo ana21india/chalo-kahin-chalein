@@ -54,6 +54,32 @@ export default function ResultsPage() {
   const options = optionsResult.options
   const conflicts = useMemo(() => computeConflicts(participants, responses), [participants, responses])
 
+  const [aiExplanations, setAiExplanations] = useState({})
+  const [aiStatus, setAiStatus] = useState('idle') // idle | loading | done | error
+  const optionsKey = options.map((o) => o.name).join('|')
+  useEffect(() => {
+    if (options.length === 0) return
+    let cancelled = false
+    setAiStatus('loading')
+    fetch('/api/explain-options', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ options, groupSize: counts.completed }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+      .then((data) => {
+        if (cancelled) return
+        setAiExplanations(data || {})
+        setAiStatus('done')
+      })
+      .catch((e) => {
+        if (cancelled) return
+        console.warn('AI explanations unavailable, falling back to rule-based text:', e.message)
+        setAiStatus('error')
+      })
+    return () => { cancelled = true }
+  }, [optionsKey])
+
   if (!trip) {
     return <Screen><div className="flex-1 flex items-center justify-center"><p className="text-sm text-neutral-400">Loading…</p></div></Screen>
   }
@@ -90,7 +116,7 @@ export default function ResultsPage() {
       <div className="flex-1 px-5 py-4 overflow-y-auto pb-10 space-y-4">
         {tab === 'Consensus' && <ConsensusTab participants={participants} responses={responses} />}
         {tab === 'Conflicts' && <ConflictsTab conflicts={conflicts} />}
-        {tab === 'Options' && <OptionsTab optionsResult={optionsResult} counts={counts} />}
+        {tab === 'Options' && <OptionsTab optionsResult={optionsResult} counts={counts} aiExplanations={aiExplanations} aiStatus={aiStatus} />}
         {tab === 'Decide' && (
           <DecideTab
             tripId={tripId}
@@ -301,7 +327,7 @@ const CONFLICT_HEADINGS = {
   travel: 'No destination reachable for everyone yet',
 }
 
-function OptionsTab({ optionsResult, counts }) {
+function OptionsTab({ optionsResult, counts, aiExplanations, aiStatus }) {
   const { dateConflict, conflictType, message, options } = optionsResult
   const [expanded, setExpanded] = useState(options[0]?.name || null)
 
@@ -325,7 +351,14 @@ function OptionsTab({ optionsResult, counts }) {
     <div className="space-y-3">
       <p className="text-xs text-neutral-400">Your group is down to {primary.length} option{primary.length > 1 ? 's' : ''}{wildcards.length ? ' + 1 wildcard' : ''}. Based on {counts.completed} of {counts.total} responses.</p>
       {options.map((opt) => (
-        <OptionCard key={opt.name} option={opt} isOpen={expanded === opt.name} onToggle={() => setExpanded(expanded === opt.name ? null : opt.name)} />
+        <OptionCard
+          key={opt.name}
+          option={opt}
+          isOpen={expanded === opt.name}
+          onToggle={() => setExpanded(expanded === opt.name ? null : opt.name)}
+          aiExplanation={aiExplanations[opt.name]}
+          aiStatus={aiStatus}
+        />
       ))}
     </div>
   )
@@ -337,7 +370,7 @@ function alignmentTone(alignment) {
   return 'red'
 }
 
-function OptionCard({ option, isOpen, onToggle }) {
+function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
   const [personOpen, setPersonOpen] = useState(null)
   return (
     <Card className="p-5">
@@ -358,6 +391,16 @@ function OptionCard({ option, isOpen, onToggle }) {
       {isOpen && (
         <div className="mt-4 space-y-4">
           <p className="text-sm text-neutral-600">{option.whyShortlisted}</p>
+
+          {aiExplanation && (
+            <div className="bg-lagoon-50 border border-lagoon-100 rounded-xl p-3">
+              <div className="text-[10px] font-bold text-lagoon-600 uppercase tracking-wide mb-1">✨ AI summary</div>
+              <p className="text-sm text-lagoon-800">{aiExplanation}</p>
+            </div>
+          )}
+          {aiStatus === 'loading' && !aiExplanation && (
+            <p className="text-xs text-neutral-400 italic">Generating an AI summary…</p>
+          )}
 
           {option.whoBlocked.length > 0 && (
             <div className="bg-rose-50 rounded-xl p-3">
