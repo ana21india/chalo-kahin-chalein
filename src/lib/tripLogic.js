@@ -23,49 +23,46 @@ function completedResponses(participants, responsesByParticipant) {
     .map((p) => ({ participant: p, response: responsesByParticipant[p.id] }))
 }
 
-// Consensus for a Top-N phase: only counts people who expressed an actual
-// preference. "No preference" participants are excluded from the denominator
-// entirely — they are never treated as votes against an option. When
-// `allOptions` is given, every option in the list is included even at 0/0 —
+// Consensus for one field, single- or multi-select. Every row carries the
+// actual people behind it — "who said this" is never hidden behind a bare
+// count, since a majority bar with no names is a majority you can't check.
+// When `allOptions` is given, every option is included even at 0/0 —
 // otherwise an option nobody picked would just silently disappear, which
 // looks like the question was never asked rather than answered with "no".
-export function groupConsensus(participants, responsesByParticipant, field, noPrefField, allOptions = null) {
+// `detailField`/`detailLabelMap` attach a second, per-person answer (e.g.
+// scope_firmness alongside trip_scope) so a viewer can see not just what
+// someone picked but how firmly, without a separate lookup.
+export function fieldConsensus(participants, responsesByParticipant, field, {
+  labelMap = {}, allOptions = null, isMulti = false, noPrefField = null, detailField = null, detailLabelMap = {},
+} = {}) {
   const entries = completedResponses(participants, responsesByParticipant)
-  const expressed = entries.filter(({ response }) => !response[noPrefField])
+  const relevant = noPrefField ? entries.filter(({ response }) => !response[noPrefField]) : entries
   const counts = {}
-  for (const { response } of expressed) {
-    const values = Array.isArray(response[field]) ? response[field] : []
+  const peopleByOption = {}
+  let answeredCount = 0
+  for (const { participant, response } of relevant) {
+    const raw = response[field]
+    const values = isMulti ? (Array.isArray(raw) ? raw : []) : (raw ? [raw] : [])
+    if (values.length > 0) answeredCount += 1
     for (const v of values) {
       counts[v] = (counts[v] || 0) + 1
+      const detail = detailField ? (detailLabelMap[response[detailField]] || response[detailField]) : null
+      if (!peopleByOption[v]) peopleByOption[v] = []
+      peopleByOption[v].push({ name: participant.name, detail })
     }
   }
-  const denom = expressed.length
+  const denom = relevant.length
   const keys = allOptions || Object.keys(counts)
-  return keys
-    .map((option) => ({ option, count: counts[option] || 0, total: denom }))
-    .sort((a, b) => b.count - a.count)
-}
-
-// Consensus for a single-select field (pace, stay type, room sharing). See
-// groupConsensus above for what `allOptions` (raw values, not labels) does.
-// The denominator is always the FULL completed-response count, never just
-// the people who happened to answer this specific field — a field left
-// blank by half the group must show up as a visible gap ("Not specified"),
-// never quietly shrink the denominator so the answered half looks like
-// unanimous consensus.
-export function singleFieldConsensus(participants, responsesByParticipant, field, labelMap = {}, allOptions = null) {
-  const entries = completedResponses(participants, responsesByParticipant)
-  const answered = entries.filter(({ response }) => response[field])
-  const counts = {}
-  for (const { response } of answered) {
-    const v = response[field]
-    counts[v] = (counts[v] || 0) + 1
+  const rows = keys.map((option) => ({
+    option: labelMap[option] || option,
+    count: counts[option] || 0,
+    total: denom,
+    people: peopleByOption[option] || [],
+  }))
+  if (!isMulti) {
+    const unanswered = denom - answeredCount
+    if (unanswered > 0) rows.push({ option: 'Not specified', count: unanswered, total: denom, people: [] })
   }
-  const denom = entries.length
-  const keys = allOptions || Object.keys(counts)
-  const rows = keys.map((option) => ({ option: labelMap[option] || option, count: counts[option] || 0, total: denom }))
-  const unanswered = entries.length - answered.length
-  if (unanswered > 0) rows.push({ option: 'Not specified', count: unanswered, total: denom })
   return rows.sort((a, b) => b.count - a.count)
 }
 

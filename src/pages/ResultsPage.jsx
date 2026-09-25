@@ -4,8 +4,11 @@ import { ChevronDown, ChevronUp, AlertTriangle, Vote as VoteIcon } from 'lucide-
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
-import { completionCounts, groupConsensus, singleFieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
-import { PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES } from '../lib/constants'
+import { completionCounts, fieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
+import {
+  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
+  SCOPE_FIRMNESS_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
+} from '../lib/constants'
 
 const optionValues = (options) => options.map((o) => (typeof o === 'string' ? o : o.value))
 
@@ -122,6 +125,11 @@ function ConsensusRow({ label, items }) {
               <div className="h-2 rounded-full bg-neutral-100 overflow-hidden">
                 <div className="h-full bg-sunset-500 rounded-full" style={{ width: `${(it.count / max) * 100}%` }} />
               </div>
+              {it.people && it.people.length > 0 && (
+                <div className="text-[11px] text-neutral-400 mt-1">
+                  {it.people.map((p) => (p.detail ? `${p.name} (${p.detail})` : p.name)).join(', ')}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -131,14 +139,28 @@ function ConsensusRow({ label, items }) {
 }
 
 function ConsensusTab({ participants, responses }) {
-  const scope = singleFieldConsensus(participants, responses, 'trip_scope', labelMapFrom(TRIP_SCOPE_OPTIONS), optionValues(TRIP_SCOPE_OPTIONS))
-  const places = groupConsensus(participants, responses, 'destination_types', 'destination_no_pref', optionValues(TRIP_TYPE_OPTIONS))
-  const pace = singleFieldConsensus(participants, responses, 'pace', labelMapFrom(PACE_OPTIONS), optionValues(PACE_OPTIONS))
-  const stay = singleFieldConsensus(participants, responses, 'stay_type', labelMapFrom(STAY_OPTIONS), optionValues(STAY_OPTIONS))
-  const rooms = singleFieldConsensus(participants, responses, 'room_sharing', labelMapFrom(ROOM_OPTIONS), optionValues(ROOM_OPTIONS))
-  const travelTime = singleFieldConsensus(participants, responses, 'travel_time_max', labelMapFrom(TRAVEL_TIME_OPTIONS), optionValues(TRAVEL_TIME_OPTIONS))
-  const startingPoints = singleFieldConsensus(participants, responses, 'starting_city')
-  const travelMode = singleFieldConsensus(participants, responses, 'travel_mode', {}, optionValues(TRAVEL_MODES))
+  const scope = fieldConsensus(participants, responses, 'trip_scope', {
+    labelMap: labelMapFrom(TRIP_SCOPE_OPTIONS), allOptions: optionValues(TRIP_SCOPE_OPTIONS),
+    detailField: 'scope_firmness', detailLabelMap: labelMapFrom(SCOPE_FIRMNESS_OPTIONS),
+  })
+  const places = fieldConsensus(participants, responses, 'destination_types', {
+    allOptions: optionValues(TRIP_TYPE_OPTIONS), isMulti: true, noPrefField: 'destination_no_pref',
+  })
+  const startingPoints = fieldConsensus(participants, responses, 'starting_city')
+  const travelMode = fieldConsensus(participants, responses, 'travel_mode', { allOptions: optionValues(TRAVEL_MODES) })
+  const travelTime = fieldConsensus(participants, responses, 'travel_time_max', {
+    labelMap: labelMapFrom(TRAVEL_TIME_OPTIONS), allOptions: optionValues(TRAVEL_TIME_OPTIONS),
+    detailField: 'travel_time_firmness', detailLabelMap: labelMapFrom(TRAVEL_TIME_FIRMNESS_OPTIONS),
+  })
+  const budgetFlex = fieldConsensus(participants, responses, 'budget_flexibility', {
+    labelMap: labelMapFrom(BUDGET_FLEXIBILITY_OPTIONS), allOptions: optionValues(BUDGET_FLEXIBILITY_OPTIONS),
+  })
+  const daysFlex = fieldConsensus(participants, responses, 'days_flexibility', {
+    labelMap: labelMapFrom(DAYS_FLEXIBILITY_OPTIONS), allOptions: optionValues(DAYS_FLEXIBILITY_OPTIONS),
+  })
+  const pace = fieldConsensus(participants, responses, 'pace', { labelMap: labelMapFrom(PACE_OPTIONS), allOptions: optionValues(PACE_OPTIONS) })
+  const stay = fieldConsensus(participants, responses, 'stay_type', { labelMap: labelMapFrom(STAY_OPTIONS), allOptions: optionValues(STAY_OPTIONS) })
+  const rooms = fieldConsensus(participants, responses, 'room_sharing', { labelMap: labelMapFrom(ROOM_OPTIONS), allOptions: optionValues(ROOM_OPTIONS) })
   return (
     <Card className="p-5">
       <ConsensusRow label="National or international" items={scope} />
@@ -150,6 +172,10 @@ function ConsensusTab({ participants, responses }) {
       <ConsensusRow label="Mode of transport" items={travelMode} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Travel time" items={travelTime} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Budget flexibility" items={budgetFlex} />
+      <div className="h-px bg-neutral-100 my-4" />
+      <ConsensusRow label="Trip-length flexibility" items={daysFlex} />
       <div className="h-px bg-neutral-100 my-4" />
       <ConsensusRow label="Pace" items={pace} />
       <div className="h-px bg-neutral-100 my-4" />
