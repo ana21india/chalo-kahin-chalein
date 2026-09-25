@@ -3,7 +3,7 @@
 // (Vercel serverless function in prod) and from the Vite dev middleware in
 // vite.config.js (local dev), so both paths share one implementation.
 
-const GEMINI_MODEL = 'gemini-2.0-flash'
+const GEMINI_MODEL = 'gemini-3.8-flash'
 
 // Turns the already-computed, deterministic option list (scores, hard
 // constraints, per-traveller fit — all real numbers from tripLogic.js) into
