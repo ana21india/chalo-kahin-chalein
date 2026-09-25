@@ -172,7 +172,7 @@ export default function PreferenceFlowPage() {
         {current === 'review' && <ReviewPhase form={form} onEdit={(i) => setStep(i)} />}
       </div>
 
-      <div className="px-5 py-4 border-t border-neutral-100 bg-[#fbf8f4] flex gap-2">
+      <div className="px-5 py-4 border-t border-neutral-100 bg-cream relative z-10 flex gap-2">
         {current === 'review' ? (
           <Button onClick={handleSubmit} className="w-full" size="lg" disabled={saving}>
             Submit my preferences
@@ -190,7 +190,7 @@ export default function PreferenceFlowPage() {
 function PhaseHeader({ title, subtitle }) {
   return (
     <div className="mb-5">
-      <h2 className="text-xl font-extrabold text-neutral-900 leading-snug">{title}</h2>
+      <h2 className="font-display text-2xl font-semibold text-neutral-900 leading-snug tracking-tight">{title}</h2>
       {subtitle && <p className="text-sm text-neutral-500 mt-1.5">{subtitle}</p>}
     </div>
   )

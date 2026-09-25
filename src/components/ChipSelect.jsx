@@ -61,9 +61,9 @@ export default function ChipSelect({ options, selected, onChange, noPreference, 
               whileTap={{ scale: 0.95 }}
               disabled={disabled}
               onClick={() => toggle(option)}
-              className={`px-4 py-2.5 rounded-full text-sm font-medium border transition-colors flex items-center gap-1.5
-                ${isSelected ? 'bg-sunset-500 border-sunset-500 text-white shadow-soft' : 'bg-white border-neutral-200 text-neutral-700'}
-                ${disabled && !isSelected ? 'opacity-35 cursor-not-allowed' : ''}`}
+              className={`px-4 py-2.5 rounded-full text-sm font-medium border transition-all flex items-center gap-1.5
+                ${isSelected ? 'bg-gradient-to-br from-sunset-400 to-sunset-600 border-sunset-500 text-white shadow-glow' : 'bg-white border-neutral-200 text-neutral-700 hover:border-sunset-300'}
+                ${disabled && !isSelected ? 'opacity-35 cursor-not-allowed hover:border-neutral-200' : ''}`}
             >
               {isSelected && <Check size={14} />}
               {option}
@@ -76,7 +76,7 @@ export default function ChipSelect({ options, selected, onChange, noPreference, 
             key={option}
             type="button"
             onClick={() => toggle(option)}
-            className="px-4 py-2.5 rounded-full text-sm font-medium border bg-sunset-500 border-sunset-500 text-white shadow-soft flex items-center gap-1.5"
+            className="px-4 py-2.5 rounded-full text-sm font-medium border bg-gradient-to-br from-sunset-400 to-sunset-600 border-sunset-500 text-white shadow-glow flex items-center gap-1.5"
           >
             <Check size={14} />
             {option}

@@ -5,8 +5,13 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Fraunces', 'ui-serif', 'serif'],
       },
       colors: {
+        cream: {
+          DEFAULT: '#fdf6ec',
+          soft: '#fbf1e3',
+        },
         sunset: {
           50: '#fff6ed',
           100: '#ffe9d3',
@@ -34,6 +39,8 @@ export default {
       },
       boxShadow: {
         soft: '0 8px 30px -8px rgba(23, 23, 23, 0.15)',
+        glow: '0 10px 25px -6px rgba(253, 90, 14, 0.45)',
+        glowLagoon: '0 10px 25px -6px rgba(38, 166, 155, 0.4)',
       },
       borderRadius: {
         xl2: '1.25rem',

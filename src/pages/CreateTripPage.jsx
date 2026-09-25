@@ -46,7 +46,7 @@ export default function CreateTripPage() {
         {error && <p className="text-xs text-rose-500">{error}</p>}
       </div>
 
-      <div className="px-5 py-4 border-t border-neutral-100 bg-[#fbf8f4]">
+      <div className="px-5 py-4 border-t border-neutral-100 bg-cream relative z-10">
         <Button onClick={handleCreate} disabled={!canSubmit} className="w-full" size="lg">
           {submitting ? 'Creating…' : 'Create Trip'}
         </Button>
