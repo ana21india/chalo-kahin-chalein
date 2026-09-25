@@ -8,16 +8,21 @@ export function Screen({ children, className = '' }) {
   )
 }
 
-export function TopBar({ title, subtitle, onBack }) {
+export function TopBar({ title, subtitle, onBack, action }) {
   return (
     <div className="px-5 pt-6 pb-2">
-      {onBack && (
-        <button onClick={onBack} className="text-sm text-neutral-400 mb-2 hover:text-neutral-600">
-          ← Back
-        </button>
-      )}
-      {title && <h1 className="text-xl font-extrabold text-neutral-900">{title}</h1>}
-      {subtitle && <p className="text-sm text-neutral-500 mt-1">{subtitle}</p>}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          {onBack && (
+            <button onClick={onBack} className="text-sm text-neutral-400 mb-2 hover:text-neutral-600">
+              ← Back
+            </button>
+          )}
+          {title && <h1 className="text-xl font-extrabold text-neutral-900 truncate">{title}</h1>}
+          {subtitle && <p className="text-sm text-neutral-500 mt-1">{subtitle}</p>}
+        </div>
+        {action && <div className="shrink-0 pt-0.5">{action}</div>}
+      </div>
     </div>
   )
 }

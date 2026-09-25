@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { CheckCircle2, Circle, Copy, Check } from 'lucide-react'
+import { CheckCircle2, Circle, Copy, Check, LayoutDashboard } from 'lucide-react'
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, subscribeToTrip } from '../lib/api'
@@ -51,7 +51,18 @@ export default function ParticipantStatusPage() {
 
   return (
     <Screen>
-      <TopBar title={trip.name} subtitle={`Created by ${trip.coordinator_name}`} />
+      <TopBar
+        title={trip.name}
+        subtitle={`Created by ${trip.coordinator_name}`}
+        action={participant.isCoordinator && (
+          <button
+            onClick={() => navigate(`/trip/${tripId}/dashboard`)}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-neutral-900 text-white text-xs font-semibold"
+          >
+            <LayoutDashboard size={14} /> Dashboard
+          </button>
+        )}
+      />
       <div className="flex-1 px-5 py-4 space-y-4 overflow-y-auto pb-10">
         <Card className="p-5">
           <div className="flex items-center gap-3">
