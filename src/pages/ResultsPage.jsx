@@ -4,10 +4,11 @@ import { ChevronDown, ChevronUp, AlertTriangle, Vote as VoteIcon } from 'lucide-
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
-import { completionCounts, fieldConsensus, computeConflicts, generateOptions } from '../lib/tripLogic'
+import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks } from '../lib/tripLogic'
 import {
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
   SCOPE_FIRMNESS_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
+  DEALBREAKERS, BUDGET_SCOPE_OPTIONS, DATE_FLEXIBILITY_OPTIONS,
 } from '../lib/constants'
 
 const optionValues = (options) => options.map((o) => (typeof o === 'string' ? o : o.value))
@@ -139,6 +140,8 @@ function ConsensusRow({ label, items }) {
 }
 
 function ConsensusTab({ participants, responses }) {
+  const checks = tripLevelChecks(participants, responses)
+  const completed = participants.filter((p) => responses[p.id]?.status === 'completed')
   const scope = fieldConsensus(participants, responses, 'trip_scope', {
     labelMap: labelMapFrom(TRIP_SCOPE_OPTIONS), allOptions: optionValues(TRIP_SCOPE_OPTIONS),
     detailField: 'scope_firmness', detailLabelMap: labelMapFrom(SCOPE_FIRMNESS_OPTIONS),
@@ -161,28 +164,101 @@ function ConsensusTab({ participants, responses }) {
   const pace = fieldConsensus(participants, responses, 'pace', { labelMap: labelMapFrom(PACE_OPTIONS), allOptions: optionValues(PACE_OPTIONS) })
   const stay = fieldConsensus(participants, responses, 'stay_type', { labelMap: labelMapFrom(STAY_OPTIONS), allOptions: optionValues(STAY_OPTIONS) })
   const rooms = fieldConsensus(participants, responses, 'room_sharing', { labelMap: labelMapFrom(ROOM_OPTIONS), allOptions: optionValues(ROOM_OPTIONS) })
+  const dealbreakers = fieldConsensus(participants, responses, 'dealbreakers', {
+    allOptions: DEALBREAKERS, isMulti: true, noPrefField: 'no_dealbreakers',
+  })
+  return (
+    <div className="space-y-4">
+      <TripChecksCard checks={checks} />
+      <Card className="p-5">
+        <ConsensusRow label="National or international" items={scope} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Kind of trip" items={places} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Starting point" items={startingPoints} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Mode of transport" items={travelMode} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Travel time" items={travelTime} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Budget flexibility" items={budgetFlex} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Trip-length flexibility" items={daysFlex} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Pace" items={pace} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Stay" items={stay} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Rooms" items={rooms} />
+        <div className="h-px bg-neutral-100 my-4" />
+        <ConsensusRow label="Dealbreakers" items={dealbreakers} />
+        <p className="text-[11px] text-neutral-400 mt-4">People who chose "no preference" aren't counted here — it's never treated as opposition.</p>
+      </Card>
+      <BudgetAndDatesCard participants={completed} responses={responses} />
+    </div>
+  )
+}
+
+function TripChecksCard({ checks }) {
+  const rows = [
+    { ok: checks.dateOk, label: 'Common travel window', okText: 'A date range exists that works for everyone (accounting for flexibility)', badText: 'No dates overlap for the whole group yet, even with flexibility' },
+    { ok: checks.scopeOk, label: 'National vs. international', okText: 'No two people have opposite non-negotiable answers', badText: 'At least two people have opposite non-negotiable answers — a genuine deadlock' },
+    { ok: checks.durationOk, label: 'Trip length', okText: 'No two people have non-overlapping fixed-availability day ranges', badText: 'At least two people have fixed (non-overlapping) day ranges — no length works for both' },
+  ]
   return (
     <Card className="p-5">
-      <ConsensusRow label="National or international" items={scope} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Kind of trip" items={places} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Starting point" items={startingPoints} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Mode of transport" items={travelMode} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Travel time" items={travelTime} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Budget flexibility" items={budgetFlex} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Trip-length flexibility" items={daysFlex} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Pace" items={pace} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Stay" items={stay} />
-      <div className="h-px bg-neutral-100 my-4" />
-      <ConsensusRow label="Rooms" items={rooms} />
-      <p className="text-[11px] text-neutral-400 mt-4">People who chose "no preference" aren't counted here — it's never treated as opposition.</p>
+      <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-3">Trip-level checks</div>
+      <div className="space-y-3">
+        {rows.map((r) => (
+          <div key={r.label} className="flex items-start gap-2.5">
+            <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${r.ok ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+            <div>
+              <div className="text-sm font-semibold text-neutral-800">{r.label}</div>
+              <div className={`text-xs mt-0.5 ${r.ok ? 'text-neutral-500' : 'text-rose-600'}`}>{r.ok ? r.okText : r.badText}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="text-[11px] text-neutral-400 mt-3">These are group-wide gates — if any fails, no destinations can be recommended until it's resolved. A destination-level travel-time mismatch is different: it just removes that one destination, not the whole trip.</p>
+    </Card>
+  )
+}
+
+function BudgetAndDatesCard({ participants, responses }) {
+  return (
+    <Card className="p-5">
+      <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-3">Budget, per person</div>
+      <div className="space-y-2 mb-5">
+        {participants.map((p) => {
+          const r = responses[p.id]
+          const scopeLabel = BUDGET_SCOPE_OPTIONS.find((o) => o.value === r.budget_includes_flights)?.label
+          const flexLabel = BUDGET_FLEXIBILITY_OPTIONS.find((o) => o.value === r.budget_flexibility)?.label
+          return (
+            <div key={p.id} className="flex items-center justify-between text-sm">
+              <span className="text-neutral-700">{p.name}</span>
+              <span className="text-neutral-500 text-right">
+                {r.budget_ceiling ? `₹${r.budget_ceiling.toLocaleString('en-IN')} (${scopeLabel}) · ${flexLabel}` : 'Not set'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-3">Dates, per person</div>
+      <div className="space-y-2">
+        {participants.map((p) => {
+          const r = responses[p.id]
+          const flexLabel = DATE_FLEXIBILITY_OPTIONS.find((o) => o.value === r.date_flexibility)?.label
+          return (
+            <div key={p.id} className="flex items-center justify-between text-sm">
+              <span className="text-neutral-700">{p.name}</span>
+              <span className="text-neutral-500 text-right">
+                {r.date_range_start && r.date_range_end ? `${r.date_range_start} to ${r.date_range_end} (${flexLabel})` : 'Flexible / not set'}
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </Card>
   )
 }

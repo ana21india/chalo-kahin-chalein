@@ -497,6 +497,20 @@ function durationConflict(entries) {
   return highestMin > lowestMax
 }
 
+// Independent status of each trip-level gate, all evaluated regardless of
+// which one generateOptions would actually short-circuit on first — so a
+// summary view can show every gate's state at once instead of only the
+// first failure the engine happens to hit.
+export function tripLevelChecks(participants, responsesByParticipant) {
+  const entries = completedResponses(participants, responsesByParticipant)
+  const dateWindow = commonDateWindow(entries)
+  return {
+    dateOk: dateWindow.exists,
+    scopeOk: !scopeConflict(entries),
+    durationOk: !durationConflict(entries),
+  }
+}
+
 // Layer 2 — destination-level travel feasibility. A hard travel-time limit
 // eliminates a DESTINATION from the candidate pool; it never eliminates the
 // trip. Respects the traveller's chosen mode exactly (a flight time can
