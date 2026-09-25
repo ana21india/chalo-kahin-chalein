@@ -102,12 +102,29 @@ export default function CoordinatorDashboardPage() {
                   </span>
                   <div className="flex items-center gap-3">
                     <StatusBadge status={status} />
-                    <button
-                      onClick={() => navigate(p.is_coordinator ? `/trip/${tripId}/preferences` : `/trip/${tripId}/preferences?as=${p.id}`)}
-                      className="text-xs font-semibold text-sunset-500"
-                    >
-                      {status === 'not_started' ? 'Start' : 'View / edit'}
-                    </button>
+                    {status === 'not_started' ? (
+                      <button
+                        onClick={() => navigate(p.is_coordinator ? `/trip/${tripId}/preferences` : `/trip/${tripId}/preferences?as=${p.id}`)}
+                        className="text-xs font-semibold text-sunset-500"
+                      >
+                        Start
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => navigate(`/trip/${tripId}/preferences/view?as=${p.id}`)}
+                          className="text-xs font-semibold text-neutral-500"
+                        >
+                          View
+                        </button>
+                        <button
+                          onClick={() => navigate(p.is_coordinator ? `/trip/${tripId}/preferences` : `/trip/${tripId}/preferences?as=${p.id}`)}
+                          className="text-xs font-semibold text-sunset-500"
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               )
