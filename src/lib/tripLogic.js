@@ -204,6 +204,28 @@ function clamp01(n) {
   return Math.max(0, Math.min(1, n))
 }
 
+// Best real travel-time estimate for one person to one destination, given
+// their requested mode(s). Falls back to the destination's generic
+// (Mumbai/Delhi-hub-ish) number when we have no curated route for their
+// city — `isEstimate: true` flags that fallback so callers can be honest
+// about it instead of presenting a guess as a measured number.
+function travelHoursForPerson(destination, response) {
+  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
+  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
+  if (availableModes.length === 0) {
+    // The requested mode doesn't reach this destination at all — treat it
+    // as a poor (not feasible-but-slow) fit rather than the fallback time.
+    return { hours: destination.travelTimeHours * 2, isEstimate: true }
+  }
+  if (response.starting_city) {
+    const estimates = availableModes
+      .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
+      .filter((h) => h != null)
+    if (estimates.length > 0) return { hours: Math.min(...estimates), isEstimate: false }
+  }
+  return { hours: destination.travelTimeHours, isEstimate: true }
+}
+
 function flexDays(flexibility) {
   switch (flexibility) {
     case 'flexible': return 3
@@ -308,19 +330,7 @@ function computeFitDetails(destination, response) {
   let travelFit = 1
   if (response.travel_time_max && response.travel_time_max !== 'no_limit') {
     const maxHours = travelTimeMaxHours(response.travel_time_max)
-    const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
-    const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
-    let actualHours = destination.travelTimeHours
-    if (availableModes.length === 0) {
-      // The requested mode doesn't reach this destination at all — treat it
-      // as a poor (not feasible-but-slow) fit rather than the fallback time.
-      actualHours = destination.travelTimeHours * 2
-    } else if (response.starting_city) {
-      const estimates = availableModes
-        .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
-        .filter((h) => h != null)
-      if (estimates.length > 0) actualHours = Math.min(...estimates)
-    }
+    const actualHours = travelHoursForPerson(destination, response).hours
     travelFit = clamp01(1 - (actualHours / maxHours) * 0.4)
   }
 
@@ -681,7 +691,15 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }, 
     const lowest = Math.min(...ceilings)
     practicalFit.push(`Typical cost ₹${destination.budgetMin.toLocaleString('en-IN')}–₹${destination.budgetMax.toLocaleString('en-IN')} per person, against the group's lowest cap of ₹${lowest.toLocaleString('en-IN')}`)
   }
-  practicalFit.push(`${destination.travelTimeHours}h typical travel time via ${destination.travelModes.join('/')}`)
+  const travelEstimates = fits.map(({ participant, response }) => ({ name: participant.name, ...travelHoursForPerson(destination, response) }))
+  const anyRealEstimate = travelEstimates.some((t) => !t.isEstimate)
+  if (anyRealEstimate) {
+    const anyFallback = travelEstimates.some((t) => t.isEstimate)
+    const parts = travelEstimates.map((t) => `${t.name} ~${Math.round(t.hours * 10) / 10}h${t.isEstimate ? ' (rough estimate)' : ''}`)
+    practicalFit.push(`Travel time by ${destination.travelModes.join('/')}: ${parts.join(', ')}${anyFallback ? ' — no curated route data for everyone\'s city, so some figures are the destination\'s general estimate' : ''}`)
+  } else {
+    practicalFit.push(`${destination.travelTimeHours}h typical travel time via ${destination.travelModes.join('/')} (general estimate — no curated route data for this group's cities)`)
+  }
   practicalFit.push(`Usually a ${destination.recommendedDuration.min}-${destination.recommendedDuration.max} day trip`)
   practicalFit.push(`Runs ${destination.typicalPace}-paced`)
   const blockedNames = fits.filter((f) => f.blocked).map((f) => f.participant.name)

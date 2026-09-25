@@ -9,11 +9,21 @@
 // estimate for, rather than guessing, so the engine never hard-blocks a
 // destination on a hallucinated number (see estimateTravelHours).
 
+// Region for the 12 hub cities we have curated data for. Satellite/nearby
+// cities that are also in the starting-city picker (MAJOR_CITIES) but aren't
+// their own hub map to whichever hub they're effectively part of for travel
+// purposes (e.g. Noida/Gurugram are NCR, treated as Delhi) — everything else
+// left out returns null from regionForCity and the engine never hard-blocks
+// or guesses a number for it (see estimateTravelHours).
 export const CITY_REGION = {
   Delhi: 'north', Chandigarh: 'north', Lucknow: 'north', Jaipur: 'north',
+  Noida: 'north', Gurugram: 'north', Faridabad: 'north', Ghaziabad: 'north',
+  Dehradun: 'north', Agra: 'north', Meerut: 'north', Karnal: 'north', Panipat: 'north',
   Mumbai: 'west', Pune: 'west', Ahmedabad: 'west',
+  'Navi Mumbai': 'west', Thane: 'west', Nashik: 'west', Surat: 'west', Vadodara: 'west',
   Bengaluru: 'south', Chennai: 'south', Hyderabad: 'south', Kochi: 'south',
-  Kolkata: 'east',
+  Mysuru: 'south', Coimbatore: 'south', Thiruvananthapuram: 'south', Vijayawada: 'south',
+  Kolkata: 'east', Howrah: 'east', Bhubaneswar: 'east', Guwahati: 'east',
 }
 
 // Hours by mode, per broad origin region. Missing mode = not a realistic way
