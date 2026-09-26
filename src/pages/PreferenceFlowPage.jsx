@@ -145,6 +145,7 @@ export default function PreferenceFlowPage() {
     destinationPick: { ok: form.destination_no_pref || form.destination_types.length > 0, hint: 'Pick at least one, or tell us you have no preference, to continue.' },
     budget: { ok: Boolean(form.budget_ceiling) && Number(form.budget_ceiling) > 0, hint: 'Enter your maximum budget to continue — this is a hard constraint the engine relies on.' },
     datesAndDuration: { ok: hasDates || hasDayRange, hint: 'Enter either specific dates or a day range you can spare, to continue.' },
+    startingPoint: { ok: Boolean(form.starting_city.trim()), hint: 'Enter your starting city to continue — the engine needs it to check real travel times.' },
     dealbreakers: { ok: form.no_dealbreakers || form.dealbreakers.length > 0, hint: 'Pick at least one, or tell us you have no dealbreakers, to continue.' },
   }
   const rule = proceedRules[current]
