@@ -130,6 +130,17 @@ export default function PreferenceFlowPage() {
 
   const current = STEPS[step]
 
+  // Skipping a step silently and consciously saying "no preference" must
+  // never look the same in the data — the Consensus tab treats "no
+  // preference" as "doesn't count as opposition", so an unanswered step
+  // quietly slipping into that same bucket would understate what the
+  // group actually wants. These are the two steps with a "no preference"
+  // toggle; require it (or an actual pick) before moving on.
+  const canProceed =
+    current === 'destinationPick' ? (form.destination_no_pref || form.destination_types.length > 0)
+    : current === 'dealbreakers' ? (form.no_dealbreakers || form.dealbreakers.length > 0)
+    : true
+
   return (
     <Screen>
       <TopBar onBack={goBack} />
@@ -162,13 +173,16 @@ export default function PreferenceFlowPage() {
         {current === 'review' && <ReviewPhase form={form} onEdit={(i) => setStep(i)} />}
       </div>
 
-      <div className="px-5 py-4 border-t border-neutral-100 bg-cream relative z-10 flex gap-2">
+      <div className="px-5 py-4 border-t border-neutral-100 bg-cream relative z-10 flex flex-col gap-2">
+        {!canProceed && (
+          <p className="text-xs text-center text-neutral-400">Pick at least one, or tell us you have no preference, to continue.</p>
+        )}
         {current === 'review' ? (
           <Button onClick={handleSubmit} className="w-full" size="lg" disabled={saving}>
             Submit my preferences
           </Button>
         ) : (
-          <Button onClick={goNext} className="w-full" size="lg" disabled={saving}>
+          <Button onClick={goNext} className="w-full" size="lg" disabled={saving || !canProceed}>
             Continue
           </Button>
         )}
