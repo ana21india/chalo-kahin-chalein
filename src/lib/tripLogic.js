@@ -252,10 +252,9 @@ function hardConstraintCheck(destination, response) {
   const dbs = response.no_dealbreakers ? [] : (response.dealbreakers || [])
   const ceiling = response.budget_ceiling
   const budgetFlex = response.budget_flexibility || 'strict'
-  // AI-estimated destinations never hard-block on budget — the budget range
-  // itself is a rough guess, so a wrong guess must degrade to "scored a bit
-  // lower" (see computeFitDetails), never "silently excluded".
-  if (ceiling && !destination.aiEstimated) {
+  // Uniform treatment, by product decision: an AI-estimated budget range
+  // hard-blocks exactly like a curated one, even though it's a guess.
+  if (ceiling) {
     const effectiveCeiling = budgetFlex === 'somewhat_flexible' ? ceiling * 1.15 : ceiling
     if (budgetFlex !== 'flexible' && destination.budgetMin > effectiveCeiling) {
       blocked = true
@@ -512,8 +511,9 @@ function travelFeasibleForGroup(destination, entries) {
 // or a date-conflict result if the group has no common travel window at all.
 // `extraDestinations` are AI-estimated places (see api/_lib/gemini.js
 // estimateDestination) someone typed in beyond the curated catalog — scored
-// identically, but flagged `aiEstimated` so budget/travel hard-blocks never
-// apply to them (a wrong guess must never silently exclude a destination).
+// and hard-constrained identically to the curated 20 (uniform treatment, by
+// product decision), just flagged `aiEstimated` for the "unverified" label
+// shown wherever the destination appears.
 export function generateOptions(participants, responsesByParticipant, maxOptions = 3, extraDestinations = []) {
   const entries = completedResponses(participants, responsesByParticipant)
   if (entries.length === 0) return { dateConflict: false, options: [] }
