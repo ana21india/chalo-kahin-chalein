@@ -391,6 +391,13 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
             <p className="text-xs text-neutral-400 italic">Generating an AI summary…</p>
           )}
 
+          {option.bridgeNote && (
+            <div className="bg-lagoon-50 border border-lagoon-200 rounded-xl p-3">
+              <div className="text-[10px] font-bold text-lagoon-600 uppercase tracking-wide mb-1">Bridges a real conflict</div>
+              <p className="text-sm text-lagoon-800">{option.bridgeNote}</p>
+            </div>
+          )}
+
           {option.whoBlocked.length > 0 && (
             <div className="bg-rose-50 rounded-xl p-3">
               <div className="text-xs font-bold text-rose-600 mb-1">Doesn't currently work for</div>
@@ -428,6 +435,21 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
               ))}
             </div>
           </div>
+
+          {option.compromiseByPerson.length > 1 && (
+            <div>
+              <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Compromise balance</div>
+              <div className="space-y-1.5">
+                {option.compromiseByPerson.map((c) => (
+                  <div key={c.name} className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-700 font-medium">{c.name}</span>
+                    <span className="text-neutral-500">{c.compromise === 0 ? 'At their personal best' : `giving up ~${c.compromise}%`}</span>
+                  </div>
+                ))}
+              </div>
+              {option.fairnessNote && <p className="text-xs text-neutral-500 mt-2">{option.fairnessNote}</p>}
+            </div>
+          )}
 
           {option.sharedExperiences.length > 0 && (
             <div>

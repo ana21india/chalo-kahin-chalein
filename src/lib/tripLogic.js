@@ -382,7 +382,25 @@ function personClusters(response) {
   return clusters
 }
 
-function scoreDestination(destination, entries) {
+// Each person's best achievable kind-of-trip fit across every destination
+// still on the table — not a fixed 1.0. "Compromise" only means something
+// relative to what this group's candidate pool could actually offer this
+// specific person, never relative to a theoretical perfect score nobody
+// could reach anyway.
+function computePersonalBest(candidates, entries) {
+  const best = {}
+  for (const { participant, response } of entries) {
+    let max = 0
+    for (const d of candidates) {
+      const pf = computeFitDetails(d, response).preferenceFit
+      if (pf > max) max = pf
+    }
+    best[participant.id] = max
+  }
+  return best
+}
+
+function scoreDestination(destination, entries, personalBest) {
   const fits = entries.map(({ participant, response }) => ({
     participant,
     response,
@@ -394,22 +412,34 @@ function scoreDestination(destination, entries) {
   const minPreferenceFit = Math.min(...preferenceFits)
   const groupCompatibility = 0.7 * avgPreferenceFit + 0.3 * minPreferenceFit
 
+  // Compromise_i = this person's personal-best fit minus what they actually
+  // get here. FairnessGap = spread between the least- and most-compromised
+  // person. A destination that's a 10/10 for one person and a 2/10 for
+  // another loses hard to one that's 8/8 for both, even at the same average
+  // — that's what the fairnessGap penalty below enforces.
+  const compromises = fits.map((f) => Math.max(0, (personalBest[f.participant.id] ?? f.details.preferenceFit) - f.details.preferenceFit))
+  const fairnessGap = compromises.length > 1 ? Math.max(...compromises) - Math.min(...compromises) : 0
+
   const avg = (key) => fits.reduce((sum, f) => sum + f.details[key], 0) / fits.length
 
-  const score100 =
-    avgPreferenceFit * 35 +
-    groupCompatibility * 20 +
-    avg('budgetFit') * 15 +
-    avg('travelFit') * 10 +
+  // Destination fit and the group's ability to share it (fairness-weighted)
+  // dominate the score; budget/travel/logistics matter but rank below it.
+  const rawScore =
+    avgPreferenceFit * 30 +
+    groupCompatibility * 25 +
+    avg('budgetFit') * 12 +
+    avg('travelFit') * 8 +
     avg('durationFit') * 5 +
     avg('paceFit') * 5 +
     avg('stayFit') * 5 +
-    avg('travelModeFit') * 5
+    avg('travelModeFit') * 5 -
+    fairnessGap * 15
+  const score100 = Math.max(0, Math.min(100, rawScore))
 
   const reds = fits.filter((f) => f.blocked).length
   const primaryAxis = Object.entries(destination.profile).sort((a, b) => b[1] - a[1])[0][0]
 
-  return { destination, fits, reds, score100, avgPreferenceFit, minPreferenceFit, groupCompatibility, primaryAxis }
+  return { destination, fits, reds, score100, avgPreferenceFit, minPreferenceFit, groupCompatibility, compromises, fairnessGap, primaryAxis }
 }
 
 // True hard constraint: two travellers who both marked their days as fixed
@@ -512,7 +542,8 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     }
   }
 
-  const scored = candidates.map((d) => scoreDestination(d, entries))
+  const personalBest = computePersonalBest(candidates, entries)
+  const scored = candidates.map((d) => scoreDestination(d, entries, personalBest))
   scored.sort((a, b) => {
     if (a.reds !== b.reds) return a.reds - b.reds
     return b.score100 - a.score100
@@ -539,8 +570,33 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
   return { dateConflict: false, options: results }
 }
 
-function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) {
+// Real conflict = two travellers picked entirely disjoint kind-of-trip
+// axes (not just different phrasing of the same thing). A destination
+// "bridges" that conflict only if it's genuinely strong (>=0.6, the same
+// bar used everywhere else for "this axis is a real strength here") on an
+// axis each of them actually picked — never a fabricated itinerary split,
+// just real profile data covering both people's real picks.
+function findBridge(destination, fits) {
+  const expressed = fits.filter((f) => !f.response.destination_no_pref && (f.response.destination_types || []).length > 0)
+  for (let i = 0; i < expressed.length; i++) {
+    for (let j = i + 1; j < expressed.length; j++) {
+      const axesA = expressed[i].response.destination_types
+      const axesB = expressed[j].response.destination_types
+      if (axesA.some((a) => axesB.includes(a))) continue // not a conflict — they share an axis
+      const bestA = axesA.map((a) => [a, destination.profile[a] ?? 0]).sort((x, y) => y[1] - x[1])[0]
+      const bestB = axesB.map((a) => [a, destination.profile[a] ?? 0]).sort((x, y) => y[1] - x[1])[0]
+      if (bestA[1] >= 0.6 && bestB[1] >= 0.6) {
+        return `Bridges ${expressed[i].participant.name}'s ${bestA[0].toLowerCase()} pick and ${expressed[j].participant.name}'s ${bestB[0].toLowerCase()} pick — both are genuinely strong here (${Math.round(bestA[1] * 100)}% and ${Math.round(bestB[1] * 100)}%), not a compromise between two separate trips.`
+      }
+    }
+  }
+  return null
+}
+
+function buildOptionSummary({ destination, fits, reds, score100, compromises, fairnessGap, primaryAxis }) {
   const groupFitScore = Math.round(score100)
+  const compromiseByPerson = fits.map((f, i) => ({ name: f.participant.name, compromise: Math.round((compromises?.[i] || 0) * 100) }))
+  const bridgeNote = findBridge(destination, fits)
 
   let alignment = 'Strong alignment'
   if (reds > 0) alignment = 'Alignment with open conflicts'
@@ -612,9 +668,17 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
   const blockedNames = fits.filter((f) => f.blocked).map((f) => f.participant.name)
   if (blockedNames.length) practicalFit.push(`Dealbreaker hit for: ${blockedNames.join(', ')}`)
 
+  const fairnessNote = fits.length > 1
+    ? (fairnessGap <= 0.15
+        ? 'Compromise is spread evenly across the group.'
+        : `Compromise isn't even here — ${compromiseByPerson.slice().sort((a, b) => b.compromise - a.compromise)[0].name} is giving up more than the others.`)
+    : ''
+
   const whyShortlisted = reds > 0
     ? `Scores ${groupFitScore}/100 overall, but doesn't clear a hard constraint for ${blockedNames.join(', ')} — shown for transparency, not as a top pick.`
-    : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
+    : bridgeNote
+      ? `Scores ${groupFitScore}/100. ${bridgeNote}`
+      : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
 
   const whoCompromises = fits.filter((f) => f.level === 'yellow').map((f) => f.participant.name)
   const whoBlocked = blockedNames
@@ -622,6 +686,8 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
   if (reds === 0) strengths.push('No hard-constraint conflicts for anyone')
   if (fits.every((f) => f.details.budgetFit >= 0.6)) strengths.push('Fits everyone’s budget comfortably')
   if (sharedExperiences.length > 0) strengths.push('Genuine shared experience across different picks')
+  if (bridgeNote) strengths.push('Genuinely bridges the group’s conflicting picks, rather than favouring one side')
+  if (fits.length > 1 && fairnessGap <= 0.15) strengths.push('Compromise is fair — no one person is carrying the trade-off')
 
   return {
     name: destination.name,
@@ -632,6 +698,10 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) 
     whoCompromises,
     whoBlocked,
     compromiseNotes: [],
+    compromiseByPerson,
+    fairnessGap: Math.round(fairnessGap * 100),
+    fairnessNote,
+    bridgeNote,
     perTraveller,
     sharedExperiences,
     practicalFit,
