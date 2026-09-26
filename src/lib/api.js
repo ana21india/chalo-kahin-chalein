@@ -113,9 +113,24 @@ export async function setTripStatus(tripId, status, finalDestination) {
   if (error) throw error
 }
 
+// Caches the AI-suggested "open to the world" destinations against the
+// exact group aggregate profile that produced them, so a page refresh (or a
+// second person opening Results) reuses the same result instead of
+// re-rolling Gemini's non-deterministic suggestion — everyone in the group
+// sees the same options until the group's actual answers change enough to
+// shift the aggregate profile.
+export async function saveDiscoveredDestinations(tripId, aggregateKey, destinations) {
+  const { error } = await supabase
+    .from('trips')
+    .update({ discovered_aggregate_key: aggregateKey, discovered_destinations: destinations })
+    .eq('id', tripId)
+  if (error) throw error
+}
+
 export function subscribeToTrip(tripId, onChange) {
   const channel = supabase
     .channel(`trip-${tripId}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'trips', filter: `id=eq.${tripId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'participants', filter: `trip_id=eq.${tripId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'responses', filter: `trip_id=eq.${tripId}` }, onChange)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'votes', filter: `trip_id=eq.${tripId}` }, onChange)

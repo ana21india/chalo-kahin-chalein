@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { ChevronDown, ChevronUp, AlertTriangle, Vote as VoteIcon } from 'lucide-react'
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
-import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
+import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus, saveDiscoveredDestinations } from '../lib/api'
 import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks, computeBudgetBand } from '../lib/tripLogic'
 import { DESTINATIONS } from '../lib/destinations'
 import {
@@ -78,6 +78,15 @@ export default function ResultsPage() {
       setExtraDestinations([])
       return
     }
+    // Reuse the cached result for this exact aggregate profile — otherwise
+    // a plain refresh (or a second person opening Results) would re-roll
+    // Gemini's non-deterministic suggestion and show a different set of
+    // "open to the world" destinations for the same group data, with no
+    // real change to explain it.
+    if (trip?.discovered_aggregate_key === aggregateKey && Array.isArray(trip?.discovered_destinations)) {
+      setExtraDestinations(trip.discovered_destinations)
+      return
+    }
     let cancelled = false
     fetch('/api/discover-destinations', {
       method: 'POST',
@@ -92,13 +101,18 @@ export default function ResultsPage() {
       }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
-      .then((data) => { if (!cancelled) setExtraDestinations(Array.isArray(data) ? data : []) })
+      .then((data) => {
+        if (cancelled) return
+        const result = Array.isArray(data) ? data : []
+        setExtraDestinations(result)
+        saveDiscoveredDestinations(tripId, aggregateKey, result).catch((e) => console.warn('Failed to cache discovered destinations:', e.message))
+      })
       .catch((e) => {
         console.warn('AI destination discovery unavailable, using curated catalog only:', e.message)
         if (!cancelled) setExtraDestinations([])
       })
     return () => { cancelled = true }
-  }, [aggregateKey])
+  }, [aggregateKey, trip?.id])
 
   const optionsResult = useMemo(() => generateOptions(participants, responses, 3, extraDestinations), [participants, responses, extraDestinations])
   const options = optionsResult.options

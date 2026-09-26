@@ -16,6 +16,12 @@ CREATE TABLE IF NOT EXISTS trips (
   duration TEXT DEFAULT 'not_decided',
   status TEXT DEFAULT 'collecting' CHECK (status IN ('collecting', 'deciding', 'decided')),
   final_destination TEXT,
+  -- Caches the AI-suggested "open to the world" destinations against the
+  -- exact group aggregate profile that produced them, so a page refresh (or
+  -- a second viewer) reuses the same result instead of re-rolling Gemini's
+  -- non-deterministic suggestion for the same group data.
+  discovered_aggregate_key TEXT,
+  discovered_destinations JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
