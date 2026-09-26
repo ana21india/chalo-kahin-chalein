@@ -1,5 +1,5 @@
 import { DESTINATIONS, EXPERIENCE_CLUSTERS } from './destinations'
-import { estimateTravelHours } from './travelTimes'
+import { estimateTravelHours, regionForCity } from './travelTimes'
 import { estimateTransportCost } from './transportCosts'
 
 export function isCompleted(response) {
@@ -591,7 +591,23 @@ function destinationTravelFeasible(destination, response) {
   const estimates = availableModes
     .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
     .filter((h) => h != null)
-  if (estimates.length === 0) return { feasible: true } // no curated data for this route — don't guess
+  if (estimates.length === 0) {
+    // No curated route for this origin. For an AI-estimated destination
+    // (never in travelTimes.js, since it's not one of the 20 curated
+    // places) we do have exactly one honest signal: Gemini's own
+    // travelTimeHoursFromNorthIndia figure (coarse-rounded, not a
+    // hallucinated decimal — see estimateDestination in api/_lib/gemini.js)
+    // — reuse it when the traveller's own origin IS north India, the same
+    // basis that number was computed against, per the "uniform treatment"
+    // product decision (an AI-estimated destination hard-blocks like a
+    // curated one, budget already works this way). Any other origin has no
+    // honest way to adjust that number, so it stays "uncertain, don't
+    // block" as before.
+    if (destination.aiEstimated && regionForCity(response.starting_city) === 'north' && destination.travelTimeHours > maxHours) {
+      return { feasible: false, reason: `~${destination.travelTimeHours}h from North India by ${availableModes.join('/')} (rough AI estimate) — over the hard limit` }
+    }
+    return { feasible: true }
+  }
 
   const best = Math.min(...estimates)
   if (best > maxHours) {
