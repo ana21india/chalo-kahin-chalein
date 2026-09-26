@@ -569,18 +569,22 @@ export function tripLevelChecks(participants, responsesByParticipant) {
 // "preference"-firmness data we actually have — never on a hallucinated
 // number. See travelTimes.js.
 function destinationTravelFeasible(destination, response) {
-  if (!response.travel_time_max || response.travel_time_max === 'no_limit') return { feasible: true }
-  if ((response.travel_time_firmness || 'preference') !== 'hard') return { feasible: true }
-
-  const maxHours = travelTimeMaxHours(response.travel_time_max)
   const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
 
   // The requested mode doesn't serve this destination at all (e.g. Train to
-  // Bali) — genuinely unreachable, independent of any time estimate.
+  // Coorg, which is Road-only) — that's a fact about the destination, not a
+  // matter of degree, so it hard-blocks regardless of how firm the time
+  // limit is (or whether one was even set) — "preference" firmness only
+  // softens the TIME comparison below, never mode-exactness.
   const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
   if (availableModes.length === 0) {
     return { feasible: false, reason: `Not reachable by ${requestedModes.join('/')}` }
   }
+
+  if (!response.travel_time_max || response.travel_time_max === 'no_limit') return { feasible: true }
+  if ((response.travel_time_firmness || 'preference') !== 'hard') return { feasible: true }
+
+  const maxHours = travelTimeMaxHours(response.travel_time_max)
 
   if (!response.starting_city) return { feasible: true }
 

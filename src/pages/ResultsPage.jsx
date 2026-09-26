@@ -602,12 +602,30 @@ function DecideTab({ tripId, trip, options, participants, votes, participant, co
     )
   }
 
+  function shareOnWhatsApp() {
+    const link = `${window.location.origin}/trip/${tripId}/results`
+    const lines = options.map((opt) => {
+      const n = (votesByOption[opt.name] || []).length
+      return `${opt.name} — ${n} vote${n !== 1 ? 's' : ''}`
+    })
+    const text = `So, where are we going? 🎉\n\n${lines.join('\n')}\n\nCast your vote: ${link}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
   return (
     <div className="space-y-3">
       <Card className="p-5">
-        <div className="flex items-center gap-2 mb-1">
-          <VoteIcon size={16} className="text-lagoon-600" />
-          <span className="font-bold text-neutral-900 text-sm">So, where are we going?</span>
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <VoteIcon size={16} className="text-lagoon-600" />
+            <span className="font-bold text-neutral-900 text-sm">So, where are we going?</span>
+          </div>
+          <button
+            onClick={shareOnWhatsApp}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500 text-white text-xs font-semibold"
+          >
+            Share on WhatsApp
+          </button>
         </div>
         <p className="text-xs text-neutral-400 mb-4">This tool shows the trade-offs — your group makes the final call. Cast your vote below.</p>
         <div className="space-y-2">

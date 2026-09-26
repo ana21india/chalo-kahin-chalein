@@ -17,11 +17,18 @@ const today = new Date().toISOString().slice(0, 10)
 const INTEGER_FIELDS = ['budget_ceiling', 'min_days', 'max_days']
 const DATE_FIELDS = ['date_range_start', 'date_range_end']
 
+// Strips a leading minus and any non-digit characters as the user types, so
+// a negative budget or day count is never even displayable, not just
+// rejected on submit.
+function nonNegativeInput(v) {
+  return v.replace(/[^0-9]/g, '')
+}
+
 function sanitizeForm(form) {
   const out = { ...form }
   for (const key of INTEGER_FIELDS) {
     const v = out[key]
-    out[key] = v === '' || v === null || v === undefined ? null : parseInt(v, 10)
+    out[key] = v === '' || v === null || v === undefined ? null : Math.max(0, parseInt(v, 10))
   }
   for (const key of DATE_FIELDS) {
     if (out[key] === '') out[key] = null
@@ -252,7 +259,7 @@ function BudgetPhase({ form, set }) {
       <PhaseHeader title="What's the maximum budget per person?" subtitle="This is a constraint, not a preference — every answer matters equally." />
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Maximum budget (₹)</div>
-        <TextInput type="number" value={form.budget_ceiling} onChange={(v) => set({ budget_ceiling: v })} placeholder="e.g. 40000" />
+        <TextInput type="number" min="0" value={form.budget_ceiling} onChange={(v) => set({ budget_ceiling: nonNegativeInput(v) })} placeholder="e.g. 40000" />
       </div>
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2.5">Whole trip, or excluding flights?</div>
@@ -327,9 +334,9 @@ function DatesPhase({ form, set }) {
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Days you can spare (min / max)</div>
         <div className="flex items-center gap-2">
-          <TextInput type="number" value={form.min_days} onChange={(v) => set({ min_days: v })} placeholder="Min days" />
+          <TextInput type="number" min="0" value={form.min_days} onChange={(v) => set({ min_days: nonNegativeInput(v) })} placeholder="Min days" />
           <span className="text-neutral-400">–</span>
-          <TextInput type="number" value={form.max_days} onChange={(v) => set({ max_days: v })} placeholder="Max days" />
+          <TextInput type="number" min="0" value={form.max_days} onChange={(v) => set({ max_days: nonNegativeInput(v) })} placeholder="Max days" />
         </div>
       </div>
       <div>
