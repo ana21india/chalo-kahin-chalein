@@ -114,6 +114,40 @@ export default function ResultsPage() {
     return () => { cancelled = true }
   }, [aggregateKey, trip?.id])
 
+  // AI-suggested destinations come with Gemini's own guessed distance,
+  // which has been demonstrably wrong for real places (see tripLogic.js).
+  // Once we know the group's actual origin cities, verify each AI
+  // destination's real road distance/time via free geocoding + routing
+  // (api/_lib/geo.js) and merge it in as `realDistances`, so the engine can
+  // sanity-check the AI's guess against reality instead of trusting it
+  // outright. Only fetches for (destination, city) pairs not already
+  // verified, and persists the result back into the same cached record.
+  const originCitiesKey = [...new Set(completedResponses.map((r) => r.starting_city).filter(Boolean))].sort().join('|')
+  useEffect(() => {
+    if (extraDestinations.length === 0 || !originCitiesKey) return
+    const originCities = originCitiesKey.split('|')
+    const missing = extraDestinations.filter((d) => originCities.some((city) => !d.realDistances || d.realDistances[city] === undefined))
+    if (missing.length === 0) return
+    let cancelled = false
+    fetch('/api/verify-distances', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinations: missing.map((d) => ({ name: d.name })), originCities }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+      .then((data) => {
+        if (cancelled) return
+        const merged = extraDestinations.map((d) => ({
+          ...d,
+          realDistances: { ...(d.realDistances || {}), ...(data[d.name] || {}) },
+        }))
+        setExtraDestinations(merged)
+        saveDiscoveredDestinations(tripId, aggregateKey, merged).catch((e) => console.warn('Failed to cache verified distances:', e.message))
+      })
+      .catch((e) => console.warn('Distance verification unavailable:', e.message))
+    return () => { cancelled = true }
+  }, [extraDestinations.map((d) => d.name).join('|'), originCitiesKey])
+
   const optionsResult = useMemo(() => generateOptions(participants, responses, 3, extraDestinations), [participants, responses, extraDestinations])
   const options = optionsResult.options
 

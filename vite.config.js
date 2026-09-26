@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { explainOptions, discoverDestinations } from './api/_lib/gemini.js'
+import { verifyDistances } from './api/_lib/geo.js'
 
 // Lets `npm run dev` serve the /api routes too, so local dev and the
 // deployed Vercel functions share the exact same implementation
@@ -38,6 +39,9 @@ function apiDevMiddleware() {
       ))
       server.middlewares.use('/api/discover-destinations', jsonMiddleware('/api/discover-destinations', ({ topAxes, budgetMin, groupSize, durationMin, durationMax, excludeNames }) =>
         discoverDestinations({ topAxes: topAxes || [], budgetMin, groupSize, durationMin, durationMax, excludeNames: excludeNames || [] }, process.env.GEMINI_API_KEY)
+      ))
+      server.middlewares.use('/api/verify-distances', jsonMiddleware('/api/verify-distances', ({ destinations, originCities }) =>
+        verifyDistances(destinations || [], originCities || [])
       ))
     },
   }

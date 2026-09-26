@@ -206,6 +206,13 @@ function travelHoursForPerson(destination, response) {
       .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
       .filter((h) => h != null)
     if (estimates.length > 0) return { hours: Math.min(...estimates), isEstimate: false }
+    // No curated route. For an AI-suggested destination, a real road
+    // distance/time (see api/_lib/geo.js) is a far more honest number than
+    // Gemini's own guess, even used as a same-mode-agnostic floor — still
+    // flagged as an estimate since it's a road-distance proxy, not a
+    // verified schedule for the traveller's actual chosen mode.
+    const real = destination.realDistances?.[response.starting_city]
+    if (typeof real === 'number') return { hours: real, isEstimate: true, realProxy: true }
   }
   return { hours: destination.travelTimeHours, isEstimate: true }
 }
@@ -594,17 +601,24 @@ function destinationTravelFeasible(destination, response) {
   if (estimates.length === 0) {
     // No curated route for this origin. For an AI-estimated destination
     // (never in travelTimes.js, since it's not one of the 20 curated
-    // places) we do have exactly one honest signal: Gemini's own
-    // travelTimeHoursFromNorthIndia figure (coarse-rounded, not a
-    // hallucinated decimal — see estimateDestination in api/_lib/gemini.js)
-    // — reuse it when the traveller's own origin IS north India, the same
-    // basis that number was computed against, per the "uniform treatment"
-    // product decision (an AI-estimated destination hard-blocks like a
-    // curated one, budget already works this way). Any other origin has no
-    // honest way to adjust that number, so it stays "uncertain, don't
-    // block" as before.
+    // places), prefer a REAL road distance/time from free geocoding +
+    // routing (api/_lib/geo.js, see ResultsPage.jsx) over Gemini's own
+    // guess — this app's own testing showed Gemini can be confidently
+    // wrong by a large margin for a real place (e.g. it estimated
+    // "Tarkarli" at 5.5h from Delhi; the real road distance is well over a
+    // day). Only when that real check itself is unavailable (geocoding
+    // failed, or the group's origin genuinely isn't north India, the only
+    // basis Gemini's own figure assumes) does this fall back to "uncertain,
+    // don't block."
+    const real = destination.aiEstimated ? destination.realDistances?.[response.starting_city] : null
+    if (typeof real === 'number') {
+      if (real > maxHours) {
+        return { feasible: false, reason: `Real road distance from ${response.starting_city} is ~${Math.round(real)}h — over the hard limit (no verified train/flight schedule exists for this AI-suggested place, so road time is used as the honest floor)` }
+      }
+      return { feasible: true }
+    }
     if (destination.aiEstimated && regionForCity(response.starting_city) === 'north' && destination.travelTimeHours > maxHours) {
-      return { feasible: false, reason: `~${destination.travelTimeHours}h from North India by ${availableModes.join('/')} (rough AI estimate) — over the hard limit` }
+      return { feasible: false, reason: `~${destination.travelTimeHours}h from North India by ${availableModes.join('/')} (rough AI estimate, unverified) — over the hard limit` }
     }
     return { feasible: true }
   }
@@ -799,11 +813,15 @@ function buildOptionSummary({ destination, fits, reds, score100, compromises, fa
     .filter(Boolean)
   practicalFit.push(...budgetLines)
   const travelEstimates = fits.map(({ participant, response }) => ({ name: participant.name, ...travelHoursForPerson(destination, response) }))
-  const anyRealEstimate = travelEstimates.some((t) => !t.isEstimate)
-  if (anyRealEstimate) {
-    const anyFallback = travelEstimates.some((t) => t.isEstimate)
-    const parts = travelEstimates.map((t) => `${t.name} ~${Math.round(t.hours * 10) / 10}h${t.isEstimate ? ' (rough estimate)' : ''}`)
-    practicalFit.push(`Travel time by ${destination.travelModes.join('/')}: ${parts.join(', ')}${anyFallback ? ' — no curated route data for everyone\'s city, so some figures are the destination\'s general estimate' : ''}`)
+  // Show per-person figures whenever any of them is grounded in something
+  // better than the destination's single flat guess — curated data, or a
+  // real road-distance check for an AI-suggested place (realProxy) — never
+  // fall back to Gemini's own guessed number when a real one is available.
+  const anyGroundedEstimate = travelEstimates.some((t) => !t.isEstimate || t.realProxy)
+  if (anyGroundedEstimate) {
+    const anyFallback = travelEstimates.some((t) => t.isEstimate && !t.realProxy)
+    const parts = travelEstimates.map((t) => `${t.name} ~${Math.round(t.hours * 10) / 10}h${t.realProxy ? ' (real road distance, rough proxy)' : t.isEstimate ? ' (rough estimate)' : ''}`)
+    practicalFit.push(`Travel time by ${destination.travelModes.join('/')}: ${parts.join(', ')}${anyFallback ? ' — no curated or verified route data for everyone\'s city, so some figures are the destination\'s general estimate' : ''}`)
   } else {
     practicalFit.push(`${destination.travelTimeHours}h typical travel time via ${destination.travelModes.join('/')} (general estimate — no curated route data for this group's cities)`)
   }
