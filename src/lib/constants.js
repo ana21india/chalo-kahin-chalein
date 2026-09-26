@@ -1,9 +1,3 @@
-export const TRIP_SCOPE_OPTIONS = [
-  { value: 'national', label: 'National', hint: 'Within India' },
-  { value: 'international', label: 'International', hint: 'Outside India' },
-  { value: 'either', label: 'Either works for me', hint: 'No strong preference' },
-]
-
 export const TRIP_TYPE_OPTIONS = [
   'Beach', 'Mountains', 'City', 'Parks & nature', 'Cultural', 'Adventure', 'Nightlife', 'Romantic',
 ]
@@ -62,12 +56,6 @@ export const BUDGET_FLEXIBILITY_OPTIONS = [
 export const DAYS_FLEXIBILITY_OPTIONS = [
   { value: 'fixed', label: 'Fixed availability', hint: 'This is exactly what I have' },
   { value: 'target', label: 'Rough target', hint: 'Could extend or shorten' },
-]
-
-export const SCOPE_FIRMNESS_OPTIONS = [
-  { value: 'preferred', label: 'Preferred' },
-  { value: 'strong', label: 'Strong preference' },
-  { value: 'non_negotiable', label: 'Non-negotiable' },
 ]
 
 export const TRAVEL_TIME_FIRMNESS_OPTIONS = [

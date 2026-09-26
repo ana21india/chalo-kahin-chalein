@@ -4,7 +4,7 @@ import { Screen, TopBar, Button, Card } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipant, getResponse } from '../lib/api'
 import {
-  TRIP_SCOPE_OPTIONS, SCOPE_FIRMNESS_OPTIONS, BUDGET_SCOPE_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS,
+  BUDGET_SCOPE_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS,
   DAYS_FLEXIBILITY_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS, TRAVEL_TIME_OPTIONS, PACE_OPTIONS,
   STAY_OPTIONS, ROOM_OPTIONS,
 } from '../lib/constants'
@@ -71,8 +71,6 @@ export default function ViewPreferencesPage() {
     )
   }
 
-  const scopeLabel = labelFor(TRIP_SCOPE_OPTIONS, response.trip_scope)
-  const firmnessLabel = labelFor(SCOPE_FIRMNESS_OPTIONS, response.scope_firmness)
   const budgetScopeLabel = labelFor(BUDGET_SCOPE_OPTIONS, response.budget_includes_flights)
   const budgetFlexLabel = labelFor(BUDGET_FLEXIBILITY_OPTIONS, response.budget_flexibility)
   const daysFlexLabel = labelFor(DAYS_FLEXIBILITY_OPTIONS, response.days_flexibility)
@@ -88,10 +86,6 @@ export default function ViewPreferencesPage() {
     <Screen>
       <TopBar title={`${target.name}'s preferences`} subtitle={response.status === 'in_progress' ? 'Still in progress — showing what\'s saved so far' : trip.name} onBack={() => navigate(-1)} />
       <div className="flex-1 px-5 py-4 space-y-3 overflow-y-auto pb-10">
-        <ViewCard title="National or international">
-          {scopeLabel || 'Not set'}{(response.trip_scope === 'national' || response.trip_scope === 'international') ? ` · ${firmnessLabel}` : ''}
-        </ViewCard>
-
         <ViewCard title="Kind of trip">
           {response.destination_no_pref ? 'No preference' : ((response.destination_types || []).join(', ') || 'Nothing selected')}
         </ViewCard>

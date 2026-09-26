@@ -6,8 +6,8 @@ import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
 import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks } from '../lib/tripLogic'
 import {
-  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRIP_SCOPE_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
-  SCOPE_FIRMNESS_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
+  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
+  TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
   DEALBREAKERS, BUDGET_SCOPE_OPTIONS, DATE_FLEXIBILITY_OPTIONS,
 } from '../lib/constants'
 
@@ -168,10 +168,6 @@ function ConsensusRow({ label, items }) {
 function ConsensusTab({ participants, responses }) {
   const checks = tripLevelChecks(participants, responses)
   const completed = participants.filter((p) => responses[p.id]?.status === 'completed')
-  const scope = fieldConsensus(participants, responses, 'trip_scope', {
-    labelMap: labelMapFrom(TRIP_SCOPE_OPTIONS), allOptions: optionValues(TRIP_SCOPE_OPTIONS),
-    detailField: 'scope_firmness', detailLabelMap: labelMapFrom(SCOPE_FIRMNESS_OPTIONS),
-  })
   const places = fieldConsensus(participants, responses, 'destination_types', {
     allOptions: optionValues(TRIP_TYPE_OPTIONS), isMulti: true, noPrefField: 'destination_no_pref',
   })
@@ -197,8 +193,6 @@ function ConsensusTab({ participants, responses }) {
     <div className="space-y-4">
       <TripChecksCard checks={checks} />
       <Card className="p-5">
-        <ConsensusRow label="National or international" items={scope} />
-        <div className="h-px bg-neutral-100 my-4" />
         <ConsensusRow label="Kind of trip" items={places} />
         <div className="h-px bg-neutral-100 my-4" />
         <ConsensusRow label="Starting point" items={startingPoints} />
@@ -228,7 +222,6 @@ function ConsensusTab({ participants, responses }) {
 function TripChecksCard({ checks }) {
   const rows = [
     { ok: checks.dateOk, label: 'Common travel window', okText: 'A date range exists that works for everyone (accounting for flexibility)', badText: 'No dates overlap for the whole group yet, even with flexibility' },
-    { ok: checks.scopeOk, label: 'National vs. international', okText: 'No two people have opposite non-negotiable answers', badText: 'At least two people have opposite non-negotiable answers — a genuine deadlock' },
     { ok: checks.durationOk, label: 'Trip length', okText: 'No two people have non-overlapping fixed-availability day ranges', badText: 'At least two people have fixed (non-overlapping) day ranges — no length works for both' },
   ]
   return (
@@ -322,7 +315,6 @@ function ConflictsTab({ conflicts }) {
 
 const CONFLICT_HEADINGS = {
   date: 'No common travel window yet',
-  scope: 'National vs. international is a deadlock',
   duration: 'No trip length works for everyone yet',
   travel: 'No destination reachable for everyone yet',
 }
@@ -345,11 +337,9 @@ function OptionsTab({ optionsResult, counts, aiExplanations, aiStatus }) {
   if (options.length === 0) {
     return <Card className="p-5"><p className="text-sm text-neutral-400">Not enough data yet to generate options.</p></Card>
   }
-  const primary = options.filter((o) => !o.isWildcard)
-  const wildcards = options.filter((o) => o.isWildcard)
   return (
     <div className="space-y-3">
-      <p className="text-xs text-neutral-400">Your group is down to {primary.length} option{primary.length > 1 ? 's' : ''}{wildcards.length ? ' + 1 wildcard' : ''}. Based on {counts.completed} of {counts.total} responses.</p>
+      <p className="text-xs text-neutral-400">Your group is down to {options.length} option{options.length > 1 ? 's' : ''}. Based on {counts.completed} of {counts.total} responses.</p>
       {options.map((opt) => (
         <OptionCard
           key={opt.name}
@@ -378,7 +368,6 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
         <div>
           <div className="font-extrabold text-lg text-neutral-900 flex items-center gap-2">
             {option.name}
-            {option.isWildcard && <Pill tone="lagoon">Wildcard</Pill>}
           </div>
           <div className="flex items-center gap-2 mt-1">
             <Pill tone={alignmentTone(option.alignment)}>{option.alignment}</Pill>

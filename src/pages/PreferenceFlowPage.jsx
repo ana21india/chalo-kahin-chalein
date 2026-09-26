@@ -4,14 +4,14 @@ import { Check, X, Plus } from 'lucide-react'
 import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../components/ui'
 import ChipSelect from '../components/ChipSelect'
 import {
-  TRIP_SCOPE_OPTIONS, TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
+  TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
-  BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS, SCOPE_FIRMNESS_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS,
+  BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS,
 } from '../lib/constants'
 import { getTrip, getResponse, getParticipant, upsertResponse } from '../lib/api'
 
-const STEPS = ['tripScope', 'destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
+const STEPS = ['destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
 const today = new Date().toISOString().slice(0, 10)
 
 const INTEGER_FIELDS = ['budget_ceiling', 'min_days', 'max_days']
@@ -30,7 +30,6 @@ function sanitizeForm(form) {
 }
 
 const emptyForm = {
-  trip_scope: 'either', scope_firmness: 'preferred',
   destination_types: [], destination_no_pref: false,
   budget_ceiling: '', budget_includes_flights: 'whole_trip', budget_flexibility: 'strict',
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '', days_flexibility: 'target',
@@ -83,7 +82,6 @@ export default function PreferenceFlowPage() {
         if (!loaded.stay_type) loaded.stay_type = ''
         if (!loaded.room_sharing) loaded.room_sharing = ''
         if (!loaded.starting_city) loaded.starting_city = ''
-        if (!loaded.scope_firmness) loaded.scope_firmness = 'preferred'
         if (!loaded.budget_flexibility) loaded.budget_flexibility = 'strict'
         if (!loaded.days_flexibility) loaded.days_flexibility = 'target'
         if (!loaded.travel_time_firmness) loaded.travel_time_firmness = 'preference'
@@ -142,14 +140,6 @@ export default function PreferenceFlowPage() {
       )}
       <ProgressDots step={step} total={STEPS.length} />
       <div className="flex-1 px-5 pt-5 pb-28 overflow-y-auto">
-        {current === 'tripScope' && (
-          <TripScopePhase
-            value={form.trip_scope}
-            onChange={(v) => set({ trip_scope: v })}
-            firmness={form.scope_firmness}
-            onFirmnessChange={(v) => set({ scope_firmness: v })}
-          />
-        )}
         {current === 'destinationPick' && (
           <div>
             <PhaseHeader title="What kind of place do you want?" subtitle="Pick up to 3." />
@@ -226,44 +216,6 @@ function AutocompleteInput({ value, onChange, options, placeholder, onCommit }) 
               {o}
             </button>
           ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function TripScopePhase({ value, onChange, firmness, onFirmnessChange }) {
-  return (
-    <div>
-      <PhaseHeader title="National or international?" subtitle="Assuming everyone's passport/visa situation is sorted." />
-      <div className="flex flex-col gap-2">
-        {TRIP_SCOPE_OPTIONS.map((opt) => (
-          <button
-            key={opt.value}
-            onClick={() => onChange(opt.value)}
-            className={`px-4 py-3.5 rounded-2xl text-left border transition-colors flex items-center justify-between
-              ${value === opt.value ? 'bg-sunset-500 border-sunset-500 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
-          >
-            <span className="font-semibold text-sm">{opt.label}</span>
-            <span className={`text-xs ${value === opt.value ? 'text-white/80' : 'text-neutral-400'}`}>{opt.hint}</span>
-          </button>
-        ))}
-      </div>
-
-      {(value === 'national' || value === 'international') && (
-        <div className="mt-6">
-          <div className="text-sm font-bold text-neutral-800 mb-2.5">How firm is this?</div>
-          <div className="flex flex-col gap-2">
-            {SCOPE_FIRMNESS_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => onFirmnessChange(opt.value)}
-                className={`px-4 py-3 rounded-xl2 text-sm font-medium border text-left ${firmness === opt.value ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
         </div>
       )}
     </div>
@@ -540,8 +492,6 @@ function DealbreakersPhase({ form, set }) {
 }
 
 function ReviewPhase({ form, onEdit }) {
-  const scopeLabel = TRIP_SCOPE_OPTIONS.find((o) => o.value === form.trip_scope)?.label
-  const firmnessLabel = SCOPE_FIRMNESS_OPTIONS.find((o) => o.value === form.scope_firmness)?.label
   const budgetScopeLabel = BUDGET_SCOPE_OPTIONS.find((o) => o.value === form.budget_includes_flights)?.label
   const budgetFlexLabel = BUDGET_FLEXIBILITY_OPTIONS.find((o) => o.value === form.budget_flexibility)?.label
   const daysFlexLabel = DAYS_FLEXIBILITY_OPTIONS.find((o) => o.value === form.days_flexibility)?.label
@@ -554,10 +504,6 @@ function ReviewPhase({ form, onEdit }) {
     <div>
       <PhaseHeader title="Here's what matters to you" subtitle="Double check everything before you submit." />
       <div className="space-y-3">
-        <ReviewCard title="National or international" onEdit={() => onEdit(STEPS.indexOf('tripScope'))}>
-          {scopeLabel || 'Not set'}{(form.trip_scope === 'national' || form.trip_scope === 'international') ? ` · ${firmnessLabel}` : ''}
-        </ReviewCard>
-
         <ReviewCard title="Kind of trip" onEdit={() => onEdit(STEPS.indexOf('destinationPick'))}>
           {form.destination_no_pref ? 'No preference' : (form.destination_types.join(', ') || 'Nothing selected')}
         </ReviewCard>

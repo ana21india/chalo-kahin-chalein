@@ -39,8 +39,6 @@ CREATE TABLE IF NOT EXISTS responses (
   activities_no_pref BOOLEAN DEFAULT FALSE,
   vibes JSONB DEFAULT '[]',
   vibes_no_pref BOOLEAN DEFAULT FALSE,
-  trip_scope TEXT DEFAULT 'either' CHECK (trip_scope IN ('national', 'international', 'either')),
-  scope_firmness TEXT DEFAULT 'preferred',
   specific_destinations JSONB DEFAULT '[]',
   no_specific_destination BOOLEAN DEFAULT FALSE,
   include_coordinator_destination BOOLEAN,

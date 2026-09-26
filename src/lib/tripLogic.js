@@ -30,8 +30,8 @@ function completedResponses(participants, responsesByParticipant) {
 // otherwise an option nobody picked would just silently disappear, which
 // looks like the question was never asked rather than answered with "no".
 // `detailField`/`detailLabelMap` attach a second, per-person answer (e.g.
-// scope_firmness alongside trip_scope) so a viewer can see not just what
-// someone picked but how firmly, without a separate lookup.
+// travel_time_firmness alongside travel_time_max) so a viewer can see not
+// just what someone picked but how firmly, without a separate lookup.
 export function fieldConsensus(participants, responsesByParticipant, field, {
   labelMap = {}, allOptions = null, isMulti = false, noPrefField = null, detailField = null, detailLabelMap = {},
 } = {}) {
@@ -162,21 +162,6 @@ export function computeConflicts(participants, responsesByParticipant) {
     })
   }
 
-  // National vs international split.
-  const wantsNational = entries.filter(({ response }) => response.trip_scope === 'national')
-  const wantsIntl = entries.filter(({ response }) => response.trip_scope === 'international')
-  if (wantsNational.length > 0 && wantsIntl.length > 0) {
-    conflicts.push({
-      type: 'scope',
-      title: 'National vs. international split',
-      description: `${wantsNational.length} ${wantsNational.length === 1 ? 'person wants' : 'people want'} a national trip, ${wantsIntl.length} ${wantsIntl.length === 1 ? 'person wants' : 'people want'} international.`,
-      groups: [
-        { label: 'National', people: wantsNational.map(({ participant }) => participant.name) },
-        { label: 'International', people: wantsIntl.map(({ participant }) => participant.name) },
-      ],
-    })
-  }
-
   return conflicts
 }
 
@@ -184,20 +169,18 @@ export function computeConflicts(participants, responsesByParticipant) {
 // Destination recommendation engine
 //
 // Sequence: identify true hard constraints → compute the group's common
-// date window (a global gate, not a per-destination penalty) → remove
-// destinations failing hard constraints → read the group's national/
-// international consensus → build a primary pool (matches the majority
-// direction) and a wildcard pool (matches the minority, only if it clears
-// its own bar) → score every surviving destination on preference fit,
-// group compatibility/fairness, and practical fit → explain every result
-// in terms of what each traveller actually asked for.
+// date window (a global gate, not a per-destination penalty) → filter out
+// destinations that fail anyone's hard travel-time limit → score every
+// surviving destination on preference fit, group compatibility/fairness,
+// and practical fit → explain every result in terms of what each traveller
+// actually asked for.
 //
 // TRUE hard constraints (eliminate outright, never bought back by a high
-// preference score): the group's common date window, budget only when
-// "Exceeds my budget" is an explicit dealbreaker, a stated maximum travel
-// time, and any other explicit dealbreaker. National/international is
-// deliberately NOT a per-person hard constraint — it's a group consensus
-// signal that splits candidates into primary vs. wildcard pools instead.
+// preference score): the group's common date window, a hard travel-time
+// limit, and any other explicit dealbreaker. There is deliberately no
+// national/international field at all — see the product decision to drop
+// it in favour of destination-level constraints (budget, travel time,
+// dates) actually capturing what matters.
 // ---------------------------------------------------------------------------
 
 function clamp01(n) {
@@ -280,21 +263,8 @@ function hardConstraintCheck(destination, response) {
   // Travel time is NOT checked here — a hard travel-time limit filters the
   // destination out of the candidate pool entirely (see
   // destinationTravelFeasible / travelFeasibleForGroup below), it never
-  // shows up as a "blocked, but still listed" conflict the way budget/scope
-  // do. See the architecture note above generateOptions.
-
-  // A non-negotiable national/international answer is a personal hard
-  // constraint for this person specifically, even though scope is normally
-  // a group-consensus signal, not a per-person block (see scopeConsensus).
-  if (response.scope_firmness === 'non_negotiable') {
-    if (response.trip_scope === 'national' && !destination.domestic) {
-      blocked = true
-      reasons.push('You said national is non-negotiable — this is international')
-    } else if (response.trip_scope === 'international' && destination.domestic) {
-      blocked = true
-      reasons.push('You said international is non-negotiable — this is domestic')
-    }
-  }
+  // shows up as a "blocked, but still listed" conflict the way budget does.
+  // See the architecture note above generateOptions.
 
   for (const db of dbs) {
     if (db === 'No long drives' && destination.travelModes.length === 1 && destination.travelModes[0] === 'Road' && destination.travelTimeHours > 6) {
@@ -442,50 +412,6 @@ function scoreDestination(destination, entries) {
   return { destination, fits, reds, score100, avgPreferenceFit, minPreferenceFit, groupCompatibility, primaryAxis }
 }
 
-function firmnessWeight(firmness) {
-  switch (firmness) {
-    case 'non_negotiable': return 2
-    case 'strong': return 1.5
-    default: return 1
-  }
-}
-
-// Group's national/international consensus. Excludes people who said
-// "either" from the denominator — they don't push the group either way,
-// but they don't get counted against a direction either. Firmer answers
-// (strong preference / non-negotiable) pull the consensus harder than a
-// merely "preferred" answer.
-function scopeConsensus(entries) {
-  let national = 0
-  let international = 0
-  for (const { response } of entries) {
-    const w = firmnessWeight(response.scope_firmness)
-    if (response.trip_scope === 'national') national += w
-    else if (response.trip_scope === 'international') international += w
-  }
-  const total = national + international
-  if (total === 0) return { direction: null, minority: null, majorityPct: 0 }
-  const nationalPct = national / total
-  const direction = nationalPct >= 0.5 ? 'national' : 'international'
-  const majorityPct = Math.max(nationalPct, 1 - nationalPct)
-  const minority = direction === 'national' ? 'international' : 'national'
-  return { direction, minority, majorityPct, total }
-}
-
-function matchesScope(destination, direction) {
-  if (!direction) return true
-  return direction === 'national' ? destination.domestic : !destination.domestic
-}
-
-// True hard constraint: two travellers who both say their scope is
-// non-negotiable, in opposite directions, cannot be reconciled by any
-// destination — the group can't travel together until one of them budges.
-function scopeConflict(entries) {
-  const nonNegNational = entries.some(({ response }) => response.trip_scope === 'national' && response.scope_firmness === 'non_negotiable')
-  const nonNegIntl = entries.some(({ response }) => response.trip_scope === 'international' && response.scope_firmness === 'non_negotiable')
-  return nonNegNational && nonNegIntl
-}
-
 // True hard constraint: two travellers who both marked their days as fixed
 // availability (not a rough target) with non-overlapping ranges can't
 // actually travel together for any single trip length.
@@ -506,7 +432,6 @@ export function tripLevelChecks(participants, responsesByParticipant) {
   const dateWindow = commonDateWindow(entries)
   return {
     dateOk: dateWindow.exists,
-    scopeOk: !scopeConflict(entries),
     durationOk: !durationConflict(entries),
   }
 }
@@ -566,15 +491,6 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     }
   }
 
-  if (scopeConflict(entries)) {
-    return {
-      dateConflict: true,
-      conflictType: 'scope',
-      message: 'At least one person marked national as non-negotiable and another marked international as non-negotiable — no destination can satisfy both. The group needs to resolve this before options can be shown.',
-      options: [],
-    }
-  }
-
   if (durationConflict(entries)) {
     return {
       dateConflict: true,
@@ -584,12 +500,10 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     }
   }
 
-  const scope = scopeConsensus(entries)
   const travelFeasible = (d) => travelFeasibleForGroup(d, entries)
-  const primaryCandidates = DESTINATIONS.filter((d) => matchesScope(d, scope.direction) && travelFeasible(d))
-  const wildcardCandidates = scope.minority ? DESTINATIONS.filter((d) => matchesScope(d, scope.minority) && travelFeasible(d)) : []
+  const candidates = DESTINATIONS.filter(travelFeasible)
 
-  if (primaryCandidates.length === 0 && wildcardCandidates.length === 0) {
+  if (candidates.length === 0) {
     return {
       dateConflict: true,
       conflictType: 'travel',
@@ -598,55 +512,34 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
     }
   }
 
-  const scoredPrimary = primaryCandidates.map((d) => scoreDestination(d, entries))
-  scoredPrimary.sort((a, b) => {
+  const scored = candidates.map((d) => scoreDestination(d, entries))
+  scored.sort((a, b) => {
     if (a.reds !== b.reds) return a.reds - b.reds
     return b.score100 - a.score100
   })
 
-  // Pick primary options while keeping diversity of primary experience.
+  // Pick options while keeping diversity of primary experience — don't
+  // shortlist two beach-primary destinations back to back.
   const chosen = []
   const usedAxes = new Set()
-  const primarySlots = wildcardCandidates.length > 0 ? Math.max(1, maxOptions - 1) : maxOptions
-  for (const candidate of scoredPrimary) {
-    if (chosen.length >= primarySlots) break
-    if (chosen.length > 0 && usedAxes.has(candidate.primaryAxis) && scoredPrimary.length > primarySlots) continue
+  for (const candidate of scored) {
+    if (chosen.length >= maxOptions) break
+    if (chosen.length > 0 && usedAxes.has(candidate.primaryAxis) && scored.length > maxOptions) continue
     chosen.push(candidate)
     usedAxes.add(candidate.primaryAxis)
   }
-  while (chosen.length < Math.min(primarySlots, scoredPrimary.length)) {
-    const next = scoredPrimary.find((s) => !chosen.includes(s))
+  while (chosen.length < Math.min(maxOptions, scored.length)) {
+    const next = scored.find((s) => !chosen.includes(s))
     if (!next) break
     chosen.push(next)
   }
 
-  // Wildcard: only include a minority-scope destination if it clears its
-  // own bar — strong for the minority traveller(s), still reasonable for
-  // the group, and not just included because someone asked for it.
-  let wildcard = null
-  if (wildcardCandidates.length > 0) {
-    const scoredWildcards = wildcardCandidates
-      .map((d) => scoreDestination(d, entries))
-      .filter((c) => c.reds === 0)
-      .sort((a, b) => b.score100 - a.score100)
-    const top = scoredWildcards[0]
-    if (top) {
-      const minorityFits = top.fits.filter(({ response }) => response.trip_scope === scope.minority)
-      const minorityFitStrong = minorityFits.length > 0 && minorityFits.every((f) => f.details.preferenceFit >= 0.6)
-      const groupStillReasonable = top.groupCompatibility >= 0.45
-      if (minorityFitStrong && groupStillReasonable) {
-        wildcard = top
-      }
-    }
-  }
+  const results = chosen.map((c) => buildOptionSummary(c))
 
-  const results = chosen.map((c) => buildOptionSummary(c, false))
-  if (wildcard) results.push(buildOptionSummary(wildcard, true))
-
-  return { dateConflict: false, options: results, scope }
+  return { dateConflict: false, options: results }
 }
 
-function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }, isWildcard) {
+function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }) {
   const groupFitScore = Math.round(score100)
 
   let alignment = 'Strong alignment'
@@ -721,9 +614,7 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }, 
 
   const whyShortlisted = reds > 0
     ? `Scores ${groupFitScore}/100 overall, but doesn't clear a hard constraint for ${blockedNames.join(', ')} — shown for transparency, not as a top pick.`
-    : isWildcard
-      ? `A wildcard: it's the minority pick in the group, but it's strong for the person(s) who wanted it and still scores ${groupFitScore}/100 for the group overall.`
-      : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
+    : `Scores ${groupFitScore}/100 — strong on ${primaryAxis.toLowerCase()}, works within everyone's budget and travel limits, and had zero hard-constraint conflicts.`
 
   const whoCompromises = fits.filter((f) => f.level === 'yellow').map((f) => f.participant.name)
   const whoBlocked = blockedNames
@@ -737,7 +628,6 @@ function buildOptionSummary({ destination, fits, reds, score100, primaryAxis }, 
     destination,
     alignment,
     groupFitScore,
-    isWildcard: Boolean(isWildcard),
     strengths,
     whoCompromises,
     whoBlocked,
