@@ -134,12 +134,21 @@ export default function PreferenceFlowPage() {
   // never look the same in the data — the Consensus tab treats "no
   // preference" as "doesn't count as opposition", so an unanswered step
   // quietly slipping into that same bucket would understate what the
-  // group actually wants. These are the two steps with a "no preference"
-  // toggle; require it (or an actual pick) before moving on.
-  const canProceed =
-    current === 'destinationPick' ? (form.destination_no_pref || form.destination_types.length > 0)
-    : current === 'dealbreakers' ? (form.no_dealbreakers || form.dealbreakers.length > 0)
-    : true
+  // group actually wants. Budget and dates are hard constraints the
+  // engine's group-level gates depend on (a date-less person imposes no
+  // constraint on the common window at all) — leaving them blank isn't a
+  // neutral "doesn't matter" the way it is for softer fields, so they're
+  // required outright rather than needing a "no preference" toggle.
+  const hasDates = Boolean(form.date_range_start && form.date_range_end)
+  const hasDayRange = Boolean(form.min_days && form.max_days)
+  const proceedRules = {
+    destinationPick: { ok: form.destination_no_pref || form.destination_types.length > 0, hint: 'Pick at least one, or tell us you have no preference, to continue.' },
+    budget: { ok: Boolean(form.budget_ceiling) && Number(form.budget_ceiling) > 0, hint: 'Enter your maximum budget to continue — this is a hard constraint the engine relies on.' },
+    datesAndDuration: { ok: hasDates || hasDayRange, hint: 'Enter either specific dates or a day range you can spare, to continue.' },
+    dealbreakers: { ok: form.no_dealbreakers || form.dealbreakers.length > 0, hint: 'Pick at least one, or tell us you have no dealbreakers, to continue.' },
+  }
+  const rule = proceedRules[current]
+  const canProceed = rule ? rule.ok : true
 
   return (
     <Screen>
@@ -174,8 +183,8 @@ export default function PreferenceFlowPage() {
       </div>
 
       <div className="px-5 py-4 border-t border-neutral-100 bg-cream relative z-10 flex flex-col gap-2">
-        {!canProceed && (
-          <p className="text-xs text-center text-neutral-400">Pick at least one, or tell us you have no preference, to continue.</p>
+        {!canProceed && rule && (
+          <p className="text-xs text-center text-neutral-400">{rule.hint}</p>
         )}
         {current === 'review' ? (
           <Button onClick={handleSubmit} className="w-full" size="lg" disabled={saving}>
