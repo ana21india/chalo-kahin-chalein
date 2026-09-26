@@ -50,9 +50,37 @@ export default function ResultsPage() {
   }, [tripId])
 
   const counts = useMemo(() => completionCounts(participants, responses), [participants, responses])
-  const optionsResult = useMemo(() => generateOptions(participants, responses, 3), [participants, responses])
-  const options = optionsResult.options
   const conflicts = useMemo(() => computeConflicts(participants, responses), [participants, responses])
+
+  // Anyone's free-text "specific destination" suggestion gets an AI-estimated
+  // rough profile so it can be scored alongside the curated catalog — see
+  // api/_lib/gemini.js estimateDestination. Fetched once per unique set of
+  // names; falls back to just the curated catalog if it fails.
+  const specificNames = [...new Set(Object.values(responses).flatMap((r) => r?.specific_destinations || []))].sort()
+  const specificKey = specificNames.join('|')
+  const [extraDestinations, setExtraDestinations] = useState([])
+  useEffect(() => {
+    if (specificNames.length === 0) {
+      setExtraDestinations([])
+      return
+    }
+    let cancelled = false
+    fetch('/api/estimate-destinations', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names: specificNames }),
+    })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
+      .then((data) => { if (!cancelled) setExtraDestinations(Array.isArray(data) ? data : []) })
+      .catch((e) => {
+        console.warn('AI destination estimates unavailable, using curated catalog only:', e.message)
+        if (!cancelled) setExtraDestinations([])
+      })
+    return () => { cancelled = true }
+  }, [specificKey])
+
+  const optionsResult = useMemo(() => generateOptions(participants, responses, 3, extraDestinations), [participants, responses, extraDestinations])
+  const options = optionsResult.options
 
   const [aiExplanations, setAiExplanations] = useState({})
   const [aiStatus, setAiStatus] = useState('idle') // idle | loading | done | error
@@ -368,6 +396,7 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
         <div>
           <div className="font-extrabold text-lg text-neutral-900 flex items-center gap-2">
             {option.name}
+            {option.aiEstimated && <Pill tone="lagoon">AI-estimated</Pill>}
           </div>
           <div className="flex items-center gap-2 mt-1">
             <Pill tone={alignmentTone(option.alignment)}>{option.alignment}</Pill>

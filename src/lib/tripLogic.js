@@ -252,7 +252,10 @@ function hardConstraintCheck(destination, response) {
   const dbs = response.no_dealbreakers ? [] : (response.dealbreakers || [])
   const ceiling = response.budget_ceiling
   const budgetFlex = response.budget_flexibility || 'strict'
-  if (ceiling) {
+  // AI-estimated destinations never hard-block on budget — the budget range
+  // itself is a rough guess, so a wrong guess must degrade to "scored a bit
+  // lower" (see computeFitDetails), never "silently excluded".
+  if (ceiling && !destination.aiEstimated) {
     const effectiveCeiling = budgetFlex === 'somewhat_flexible' ? ceiling * 1.15 : ceiling
     if (budgetFlex !== 'flexible' && destination.budgetMin > effectiveCeiling) {
       blocked = true
@@ -507,7 +510,11 @@ function travelFeasibleForGroup(destination, entries) {
 
 // Produces 2-3 viable destinations with full group scoring and explanations,
 // or a date-conflict result if the group has no common travel window at all.
-export function generateOptions(participants, responsesByParticipant, maxOptions = 3) {
+// `extraDestinations` are AI-estimated places (see api/_lib/gemini.js
+// estimateDestination) someone typed in beyond the curated catalog — scored
+// identically, but flagged `aiEstimated` so budget/travel hard-blocks never
+// apply to them (a wrong guess must never silently exclude a destination).
+export function generateOptions(participants, responsesByParticipant, maxOptions = 3, extraDestinations = []) {
   const entries = completedResponses(participants, responsesByParticipant)
   if (entries.length === 0) return { dateConflict: false, options: [] }
 
@@ -531,7 +538,7 @@ export function generateOptions(participants, responsesByParticipant, maxOptions
   }
 
   const travelFeasible = (d) => travelFeasibleForGroup(d, entries)
-  const candidates = DESTINATIONS.filter(travelFeasible)
+  const candidates = [...DESTINATIONS, ...extraDestinations].filter(travelFeasible)
 
   if (candidates.length === 0) {
     return {
@@ -649,6 +656,9 @@ function buildOptionSummary({ destination, fits, reds, score100, compromises, fa
 
   // Practical fit — the constraint-facing summary, not preference scoring.
   const practicalFit = []
+  if (destination.aiEstimated) {
+    practicalFit.push('AI-estimated destination — budget, travel time and vibe are a rough educated guess, not verified data')
+  }
   const ceilings = fits.map((f) => f.response.budget_ceiling).filter(Boolean)
   if (ceilings.length) {
     const lowest = Math.min(...ceilings)
@@ -692,6 +702,7 @@ function buildOptionSummary({ destination, fits, reds, score100, compromises, fa
   return {
     name: destination.name,
     destination,
+    aiEstimated: Boolean(destination.aiEstimated),
     alignment,
     groupFitScore,
     strengths,

@@ -1,36 +1,51 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
-import { explainOptions } from './api/_lib/gemini.js'
+import { explainOptions, estimateDestination } from './api/_lib/gemini.js'
 
-// Lets `npm run dev` serve /api/explain-options too, so local dev and the
-// deployed Vercel function share the exact same implementation
+// Lets `npm run dev` serve the /api routes too, so local dev and the
+// deployed Vercel functions share the exact same implementation
 // (api/_lib/gemini.js) instead of drifting apart.
+function jsonMiddleware(path, handler) {
+  return (req, res, next) => {
+    if (req.method !== 'POST') {
+      res.statusCode = 405
+      res.end()
+      return
+    }
+    let body = ''
+    req.on('data', (chunk) => { body += chunk })
+    req.on('end', async () => {
+      try {
+        const result = await handler(JSON.parse(body || '{}'))
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify(result))
+      } catch (e) {
+        console.error(`${path} (dev) failed:`, e)
+        res.statusCode = 500
+        res.setHeader('Content-Type', 'application/json')
+        res.end(JSON.stringify({ error: e.message }))
+      }
+    })
+  }
+}
+
 function apiDevMiddleware() {
   return {
     name: 'api-dev-middleware',
     configureServer(server) {
-      server.middlewares.use('/api/explain-options', async (req, res) => {
-        if (req.method !== 'POST') {
-          res.statusCode = 405
-          res.end()
-          return
-        }
-        let body = ''
-        req.on('data', (chunk) => { body += chunk })
-        req.on('end', async () => {
-          try {
-            const { options, groupSize } = JSON.parse(body || '{}')
-            const result = await explainOptions({ options, groupSize }, process.env.GEMINI_API_KEY)
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify(result))
-          } catch (e) {
-            console.error('explain-options (dev) failed:', e)
-            res.statusCode = 500
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ error: e.message }))
-          }
-        })
-      })
+      server.middlewares.use('/api/explain-options', jsonMiddleware('/api/explain-options', ({ options, groupSize }) =>
+        explainOptions({ options, groupSize }, process.env.GEMINI_API_KEY)
+      ))
+      server.middlewares.use('/api/estimate-destinations', jsonMiddleware('/api/estimate-destinations', async ({ names }) => {
+        const unique = [...new Set((names || []).map((n) => n.trim()).filter(Boolean))]
+        const results = await Promise.all(
+          unique.map((name) => estimateDestination(name, process.env.GEMINI_API_KEY).catch((e) => {
+            console.error(`estimate-destinations (dev) failed for "${name}":`, e)
+            return null
+          }))
+        )
+        return results.filter(Boolean)
+      }))
     },
   }
 }
