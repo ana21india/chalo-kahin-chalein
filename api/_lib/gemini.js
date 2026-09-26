@@ -140,3 +140,54 @@ Axis keys in "profile" and "highlights" must exactly match: ${PROFILE_AXES.join(
     suitableStayTypes: parsed.suitableStayTypes && parsed.suitableStayTypes.length ? parsed.suitableStayTypes : ['hotel'],
   }
 }
+
+// Suggests candidate destination NAMES purely from the group's aggregated
+// preferences (no individual names a place — see the product decision this
+// replaced: letting one person type a destination reintroduced the exact
+// "person A wants Bali, the group never agreed" problem the app exists to
+// prevent). The suggestions still have zero special status — they're
+// estimated with the same estimateDestination() and scored identically to
+// everything else; naming them here doesn't make them win anything.
+export async function suggestDestinations({ topAxes, budgetMin, groupSize, durationMin, durationMax, excludeNames }, apiKey) {
+  if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
+
+  const prompt = `A group of ${groupSize} travellers is planning a trip together. Their combined preferences: ${topAxes.length ? `they lean toward ${topAxes.join(', ')}` : 'no strong kind-of-trip preference expressed'}${budgetMin ? `, a budget around ₹${budgetMin} or below per person` : ''}${durationMin ? `, a trip of roughly ${durationMin}-${durationMax || durationMin} days` : ''}. Suggest exactly 3 real, specific destination names (a city or region, domestic India or international) that genuinely fit this combined profile well — not generic clichés unless they truly fit. Do NOT suggest any of these (already covered elsewhere): ${excludeNames.join(', ')}.
+
+Return ONLY a JSON array of 3 destination name strings, nothing else, no markdown fences. Example: ["Name One", "Name Two", "Name Three"]`
+
+  const res = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
+      }),
+    }
+  )
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '')
+    throw new Error(`Gemini API error ${res.status}: ${errText}`)
+  }
+
+  const data = await res.json()
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+  if (!text) throw new Error('Gemini returned no text')
+  const names = JSON.parse(text)
+  return Array.isArray(names) ? names.filter((n) => typeof n === 'string' && n.trim()) : []
+}
+
+// Full pipeline: suggest names from the aggregate profile, then estimate
+// each one — one call from the frontend, all Gemini calls stay server-side.
+export async function discoverDestinations(aggregateProfile, apiKey) {
+  const names = await suggestDestinations(aggregateProfile, apiKey)
+  const estimated = await Promise.all(
+    names.map((name) => estimateDestination(name, apiKey).catch((e) => {
+      console.error(`discoverDestinations: estimate failed for "${name}":`, e)
+      return null
+    }))
+  )
+  return estimated.filter(Boolean)
+}

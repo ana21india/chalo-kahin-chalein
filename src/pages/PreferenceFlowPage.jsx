@@ -30,7 +30,7 @@ function sanitizeForm(form) {
 }
 
 const emptyForm = {
-  destination_types: [], destination_no_pref: false, specific_destinations: [],
+  destination_types: [], destination_no_pref: false,
   budget_ceiling: '', budget_includes_flights: 'whole_trip', budget_flexibility: 'strict',
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '', days_flexibility: 'target',
   starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit', travel_time_firmness: 'preference',
@@ -82,7 +82,6 @@ export default function PreferenceFlowPage() {
         if (!loaded.stay_type) loaded.stay_type = ''
         if (!loaded.room_sharing) loaded.room_sharing = ''
         if (!loaded.starting_city) loaded.starting_city = ''
-        if (!loaded.specific_destinations) loaded.specific_destinations = []
         if (!loaded.budget_flexibility) loaded.budget_flexibility = 'strict'
         if (!loaded.days_flexibility) loaded.days_flexibility = 'target'
         if (!loaded.travel_time_firmness) loaded.travel_time_firmness = 'preference'
@@ -153,15 +152,6 @@ export default function PreferenceFlowPage() {
               max={3}
               allowCustom={false}
             />
-            <div className="mt-6">
-              <div className="text-sm font-bold text-neutral-800 mb-1.5">Have somewhere specific in mind? (optional)</div>
-              <p className="text-xs text-neutral-400 mb-2.5">Not on our curated list? Type it anyway — we'll get an AI-estimated rough read on it (budget, vibe, travel time), clearly marked as an estimate, not verified data.</p>
-              <TextInput
-                value={form.specific_destinations[0] || ''}
-                onChange={(v) => set({ specific_destinations: v ? [v] : [] })}
-                placeholder="e.g. Da Nang, Georgia, Ladakh"
-              />
-            </div>
           </div>
         )}
         {current === 'budget' && <BudgetPhase form={form} set={set} />}
@@ -516,7 +506,6 @@ function ReviewPhase({ form, onEdit }) {
       <div className="space-y-3">
         <ReviewCard title="Kind of trip" onEdit={() => onEdit(STEPS.indexOf('destinationPick'))}>
           {form.destination_no_pref ? 'No preference' : (form.destination_types.join(', ') || 'Nothing selected')}
-          {form.specific_destinations.length > 0 ? ` · Suggested: ${form.specific_destinations.join(', ')}` : ''}
         </ReviewCard>
 
         <ReviewCard title="Budget" onEdit={() => onEdit(STEPS.indexOf('budget'))}>

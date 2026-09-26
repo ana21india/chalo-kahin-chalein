@@ -5,6 +5,7 @@ import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
 import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks } from '../lib/tripLogic'
+import { DESTINATIONS } from '../lib/destinations'
 import {
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
   TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
@@ -52,32 +53,52 @@ export default function ResultsPage() {
   const counts = useMemo(() => completionCounts(participants, responses), [participants, responses])
   const conflicts = useMemo(() => computeConflicts(participants, responses), [participants, responses])
 
-  // Anyone's free-text "specific destination" suggestion gets an AI-estimated
-  // rough profile so it can be scored alongside the curated catalog — see
-  // api/_lib/gemini.js estimateDestination. Fetched once per unique set of
-  // names; falls back to just the curated catalog if it fails.
-  const specificNames = [...new Set(Object.values(responses).flatMap((r) => r?.specific_destinations || []))].sort()
-  const specificKey = specificNames.join('|')
+  // "Open to the world" is driven entirely by the group's AGGREGATED
+  // preferences, never by one person naming a place — naming a destination
+  // directly reintroduces the exact "person A wants Bali, the group never
+  // agreed" problem this app exists to prevent. Gemini only ever sees a
+  // summary (top preference axes, budget, duration, group size), suggests
+  // destination names the curated catalog doesn't cover, and those are
+  // estimated and scored exactly like everything else — no individual
+  // input, no special status.
+  const completedResponses = Object.values(responses).filter((r) => r?.status === 'completed')
+  const axisCounts = {}
+  for (const r of completedResponses) {
+    if (r.destination_no_pref) continue
+    for (const axis of r.destination_types || []) axisCounts[axis] = (axisCounts[axis] || 0) + 1
+  }
+  const topAxes = Object.entries(axisCounts).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([axis]) => axis)
+  const ceilings = completedResponses.map((r) => r.budget_ceiling).filter(Boolean)
+  const budgetMin = ceilings.length ? Math.min(...ceilings) : null
+  const durations = completedResponses.map((r) => r.max_days || r.min_days).filter(Boolean)
+  const aggregateKey = JSON.stringify({ topAxes, budgetMin, groupSize: completedResponses.length })
   const [extraDestinations, setExtraDestinations] = useState([])
   useEffect(() => {
-    if (specificNames.length === 0) {
+    if (completedResponses.length < 2) {
       setExtraDestinations([])
       return
     }
     let cancelled = false
-    fetch('/api/estimate-destinations', {
+    fetch('/api/discover-destinations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: specificNames }),
+      body: JSON.stringify({
+        topAxes,
+        budgetMin,
+        groupSize: completedResponses.length,
+        durationMin: durations.length ? Math.min(...durations) : null,
+        durationMax: durations.length ? Math.max(...durations) : null,
+        excludeNames: DESTINATIONS.map((d) => d.name),
+      }),
     })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`status ${r.status}`))))
       .then((data) => { if (!cancelled) setExtraDestinations(Array.isArray(data) ? data : []) })
       .catch((e) => {
-        console.warn('AI destination estimates unavailable, using curated catalog only:', e.message)
+        console.warn('AI destination discovery unavailable, using curated catalog only:', e.message)
         if (!cancelled) setExtraDestinations([])
       })
     return () => { cancelled = true }
-  }, [specificKey])
+  }, [aggregateKey])
 
   const optionsResult = useMemo(() => generateOptions(participants, responses, 3, extraDestinations), [participants, responses, extraDestinations])
   const options = optionsResult.options
