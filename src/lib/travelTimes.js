@@ -50,9 +50,9 @@ export const TRAVEL_TIMES = {
   },
   Manali: {
     north: { Flight: 1.25, Road: 10 },
-    west: { Flight: 3 },
-    south: { Flight: 4 },
-    east: { Flight: 4.5 },
+    west: { Flight: 3, Road: 24 },
+    south: { Flight: 4, Road: 34 },
+    east: { Flight: 4.5, Road: 38 },
   },
   Shimla: {
     north: { Train: 8, Road: 7 },
@@ -104,7 +104,7 @@ export const TRAVEL_TIMES = {
   },
   Ladakh: {
     north: { Flight: 1.5, Road: 16 },
-    west: { Flight: 3 }, south: { Flight: 4 }, east: { Flight: 4.5 },
+    west: { Flight: 3, Road: 40 }, south: { Flight: 4, Road: 48 }, east: { Flight: 4.5, Road: 46 },
   },
   Pondicherry: {
     south: { Train: 6, Road: 6 },
