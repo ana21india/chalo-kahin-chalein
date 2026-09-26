@@ -434,14 +434,14 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
       </button>
 
       {isOpen && (
-        <div className="mt-4 space-y-4">
-          <p className="text-sm text-neutral-600">{option.whyShortlisted}</p>
-
-          {aiExplanation && (
+        <div className="mt-4 space-y-3">
+          {aiExplanation ? (
             <div className="bg-lagoon-50 border border-lagoon-100 rounded-xl p-3">
               <div className="text-[10px] font-bold text-lagoon-600 uppercase tracking-wide mb-1">✨ AI summary</div>
               <p className="text-sm text-lagoon-800">{aiExplanation}</p>
             </div>
+          ) : (
+            <p className="text-sm text-neutral-600">{option.whyShortlisted}</p>
           )}
           {aiStatus === 'loading' && !aiExplanation && (
             <p className="text-xs text-neutral-400 italic">Generating an AI summary…</p>
@@ -454,65 +454,11 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
             </div>
           )}
 
-          {option.whoBlocked.length > 0 && (
-            <div className="bg-rose-50 rounded-xl p-3">
-              <div className="text-xs font-bold text-rose-600 mb-1">Doesn't currently work for</div>
-              <p className="text-sm text-rose-700">{option.whoBlocked.join(', ')}</p>
-            </div>
-          )}
-
-          {option.whoCompromises.length > 0 && (
-            <div className="bg-amber-50 rounded-xl p-3">
-              <div className="text-xs font-bold text-amber-600 mb-1">Needs a small compromise from</div>
-              <p className="text-sm text-amber-700">{option.whoCompromises.join(', ')}</p>
-            </div>
-          )}
-
-          <div>
-            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Why it works, person by person</div>
-            <div className="space-y-3">
-              {option.perTraveller.map((t) => (
-                <div key={t.name}>
-                  <div className="text-sm font-bold text-neutral-800 mb-1">{t.name}</div>
-                  <ul className="space-y-0.5">
-                    {t.bullets.map((b, i) => (
-                      <li key={i} className="text-xs text-neutral-600 flex items-start gap-1.5">
-                        <span>{b.strong === false ? '⚠️' : '✓'}</span>
-                        <span><span className="font-medium">{b.preference}</span> → {b.matches}</span>
-                      </li>
-                    ))}
-                    {t.blocked && t.blockReasons.map((r, i) => (
-                      <li key={`b${i}`} className="text-xs text-rose-600 flex items-start gap-1.5">
-                        <span>✗</span><span>{r}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {option.compromiseByPerson.length > 1 && (
-            <div>
-              <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Compromise balance</div>
-              <div className="space-y-1.5">
-                {option.compromiseByPerson.map((c) => (
-                  <div key={c.name} className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-700 font-medium">{c.name}</span>
-                    <span className="text-neutral-500">{c.compromise === 0 ? 'At their personal best' : `giving up ~${c.compromise}%`}</span>
-                  </div>
-                ))}
-              </div>
-              {option.fairnessNote && <p className="text-xs text-neutral-500 mt-2">{option.fairnessNote}</p>}
-            </div>
-          )}
-
           {option.sharedExperiences.length > 0 && (
-            <div>
-              <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Shared experiences</div>
+            <div className="bg-lagoon-50 rounded-xl p-3">
               <ul className="space-y-1">
                 {option.sharedExperiences.map((s) => (
-                  <li key={s.experience} className="text-xs text-lagoon-700 flex items-start gap-1.5">
+                  <li key={s.experience} className="text-xs text-lagoon-800 flex items-start gap-1.5">
                     <span>✓</span><span><span className="font-medium">{s.experience}</span> — {s.why}</span>
                   </li>
                 ))}
@@ -520,41 +466,60 @@ function OptionCard({ option, isOpen, onToggle, aiExplanation, aiStatus }) {
             </div>
           )}
 
+          {/* One entry per person: a single always-visible status line (fit,
+              compromise, block reason at a glance), tap to expand the full
+              breakdown — replaces what used to be three separate,
+              overlapping sections (per-person bullets, compromise balance,
+              person-level fit) showing largely the same facts three ways. */}
           <div>
-            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Practical fit</div>
-            <ul className="space-y-0.5">
+            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Per person</div>
+            <div className="space-y-1">
+              {option.fits.map((f) => {
+                const compromise = option.compromiseByPerson.find((c) => c.name === f.participant.name)?.compromise ?? 0
+                const status = f.blocked
+                  ? (f.reasons.find((r) => r.ok === false)?.text || 'Blocked')
+                  : compromise === 0 ? 'At their personal best' : `Giving up ~${compromise}%`
+                return (
+                  <div key={f.participant.id}>
+                    <button
+                      onClick={() => setPersonOpen(personOpen === f.participant.id ? null : f.participant.id)}
+                      className="w-full flex items-center justify-between py-1.5"
+                    >
+                      <span className="text-sm text-neutral-700 flex items-center gap-1.5">
+                        <span className="text-base leading-none">{f.level === 'green' ? '🟢' : f.level === 'yellow' ? '🟡' : '🔴'}</span>
+                        {f.participant.name}
+                      </span>
+                      <span className={`text-xs ${f.blocked ? 'text-rose-600' : 'text-neutral-400'}`}>{status}</span>
+                    </button>
+                    {personOpen === f.participant.id && (
+                      <div className="bg-neutral-50 rounded-xl p-3 mb-1 space-y-1">
+                        {f.reasons.map((r, i) => (
+                          <div key={i} className="text-xs text-neutral-600 flex items-start gap-1.5">
+                            <span>{r.ok === true ? '✓' : r.ok === 'warn' ? '⚠️' : '✗'}</span>
+                            <span>{r.text}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {option.fairnessNote && <p className="text-xs text-neutral-500 mt-1.5">{option.fairnessNote}</p>}
+          </div>
+
+          <details className="group">
+            <summary className="text-xs font-bold text-neutral-400 uppercase tracking-wide cursor-pointer list-none flex items-center gap-1">
+              Practical fit
+              <ChevronDown size={12} className="group-open:hidden" />
+              <ChevronUp size={12} className="hidden group-open:inline" />
+            </summary>
+            <ul className="space-y-0.5 mt-2">
               {option.practicalFit.map((p, i) => (
                 <li key={i} className="text-xs text-neutral-600">• {p}</li>
               ))}
             </ul>
-          </div>
-
-          <div>
-            <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">Person-level fit</div>
-            <div className="space-y-1.5">
-              {option.fits.map((f) => (
-                <div key={f.participant.id}>
-                  <button
-                    onClick={() => setPersonOpen(personOpen === f.participant.id ? null : f.participant.id)}
-                    className="w-full flex items-center justify-between py-1.5"
-                  >
-                    <span className="text-sm text-neutral-700">{f.participant.name}</span>
-                    <span className="text-lg leading-none">{f.level === 'green' ? '🟢' : f.level === 'yellow' ? '🟡' : '🔴'}</span>
-                  </button>
-                  {personOpen === f.participant.id && (
-                    <div className="bg-neutral-50 rounded-xl p-3 mb-1 space-y-1">
-                      {f.reasons.map((r, i) => (
-                        <div key={i} className="text-xs text-neutral-600 flex items-start gap-1.5">
-                          <span>{r.ok === true ? '✓' : r.ok === 'warn' ? '⚠️' : '✗'}</span>
-                          <span>{r.text}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
+          </details>
         </div>
       )}
     </Card>
