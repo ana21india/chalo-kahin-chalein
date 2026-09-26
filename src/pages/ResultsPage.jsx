@@ -4,7 +4,7 @@ import { ChevronDown, ChevronUp, AlertTriangle, Vote as VoteIcon } from 'lucide-
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeToTrip, setTripStatus } from '../lib/api'
-import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks } from '../lib/tripLogic'
+import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks, computeBudgetBand } from '../lib/tripLogic'
 import { DESTINATIONS } from '../lib/destinations'
 import {
   PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
@@ -293,9 +293,15 @@ function TripChecksCard({ checks }) {
 }
 
 function BudgetAndDatesCard({ participants, responses }) {
+  const band = computeBudgetBand(participants, responses)
   return (
     <Card className="p-5">
       <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-3">Budget, per person</div>
+      {band && (
+        <p className="text-xs text-neutral-500 mb-4">
+          Group's initial budget target: <span className="font-semibold text-neutral-700">₹{band.low.toLocaleString('en-IN')}–₹{band.high.toLocaleString('en-IN')}/person</span> — the lowest feasible band before anyone needs to use their stated flexibility. Destinations priced higher can still work if the pricier options' flexibility covers the gap.
+        </p>
+      )}
       <div className="space-y-2 mb-5">
         {participants.map((p) => {
           const r = responses[p.id]

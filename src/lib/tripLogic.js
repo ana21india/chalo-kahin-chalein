@@ -1,5 +1,6 @@
 import { DESTINATIONS, EXPERIENCE_CLUSTERS } from './destinations'
 import { estimateTravelHours } from './travelTimes'
+import { estimateTransportCost } from './transportCosts'
 
 export function isCompleted(response) {
   return response?.status === 'completed'
@@ -240,6 +241,64 @@ function commonDateWindow(entries) {
   return { exists: start <= end, start, end }
 }
 
+// A person's trip length for cost purposes: their stated range (midpoint of
+// min/max, or whichever one they gave), else the destination's own typical
+// range — never a bare guess with no grounding.
+function tripDurationDays(destination, response) {
+  if (response.min_days && response.max_days) return (Number(response.min_days) + Number(response.max_days)) / 2
+  if (response.max_days) return Number(response.max_days)
+  if (response.min_days) return Number(response.min_days)
+  return (destination.recommendedDuration.min + destination.recommendedDuration.max) / 2
+}
+
+// Real, per-person ballpark trip cost — transport (mode/origin-aware, from
+// transportCosts.js) + accommodation/food/local/activities/mandatory (from
+// destination.costBreakdown), scaled to this person's own trip length and
+// respecting their exact requested mode. Never fabricates a number: if we
+// have no curated transport route for this origin/mode, or no cost
+// breakdown for this destination at all (e.g. an AI-estimated destination),
+// falls back to the destination's flat budgetMin/Max range — the same
+// graceful-uncertainty rule used throughout this file (see travelTimes.js).
+export function estimateTripCost(destination, response) {
+  const cb = destination.costBreakdown
+  if (!cb) {
+    return { low: destination.budgetMin, high: destination.budgetMax, transport: null, nonTransport: null, isEstimate: true }
+  }
+
+  const days = tripDurationDays(destination, response)
+  const nights = Math.max(days - 1, 1)
+
+  const nonTransport = {
+    low: cb.stayPerNight[0] * nights + cb.foodPerDay[0] * days + cb.localPerDay[0] * days + cb.activities[0] + cb.mandatory[0],
+    high: cb.stayPerNight[1] * nights + cb.foodPerDay[1] * days + cb.localPerDay[1] * days + cb.activities[1] + cb.mandatory[1],
+  }
+
+  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
+  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
+  let transport = null
+  if (response.starting_city && availableModes.length > 0) {
+    const estimates = availableModes
+      .map((m) => estimateTransportCost(destination.name, response.starting_city, m))
+      .filter(Boolean)
+    if (estimates.length > 0) transport = estimates.reduce((best, cur) => (cur.low < best.low ? cur : best))
+  }
+
+  if (!transport) {
+    // No curated transport route for this origin/mode — the total falls
+    // back to the destination's flat range, but the non-flight pieces are
+    // still real, so "excluding flights" comparisons stay meaningful.
+    return { low: destination.budgetMin, high: destination.budgetMax, transport: null, nonTransport, isEstimate: true }
+  }
+
+  return {
+    low: transport.low + nonTransport.low,
+    high: transport.high + nonTransport.high,
+    transport,
+    nonTransport,
+    isEstimate: false,
+  }
+}
+
 // Hard constraints that eliminate a destination for one person — never
 // compensated for by a high preference score elsewhere. Budget and travel
 // time only block when the person marked them firmly (strict / hard limit);
@@ -256,9 +315,19 @@ function hardConstraintCheck(destination, response) {
   // hard-blocks exactly like a curated one, even though it's a guess.
   if (ceiling) {
     const effectiveCeiling = budgetFlex === 'somewhat_flexible' ? ceiling * 1.15 : ceiling
-    if (budgetFlex !== 'flexible' && destination.budgetMin > effectiveCeiling) {
+    const cost = estimateTripCost(destination, response)
+    // "Excluding flights" means the flight/train/road leg is shown
+    // separately and never counted against the stated ceiling (see spec
+    // section 9) — only checked when we actually have a transport estimate
+    // to subtract; otherwise the flat total is the best we know.
+    const excludesFlights = response.budget_includes_flights === 'excluding_flights'
+    const relevantLow = excludesFlights && cost.nonTransport ? cost.nonTransport.low : cost.low
+    if (budgetFlex !== 'flexible' && relevantLow > effectiveCeiling) {
       blocked = true
-      reasons.push(`Exceeds your ${budgetFlex === 'strict' ? 'strict' : 'stretched'} maximum budget (₹${ceiling.toLocaleString('en-IN')})`)
+      const costLabel = excludesFlights && cost.nonTransport
+        ? `Estimated non-flight cost ~₹${Math.round(relevantLow).toLocaleString('en-IN')}/person`
+        : `Estimated trip cost ~₹${Math.round(relevantLow).toLocaleString('en-IN')}/person`
+      reasons.push(`${costLabel} exceeds your ${budgetFlex === 'strict' ? 'strict' : 'stretched'} maximum budget (₹${ceiling.toLocaleString('en-IN')})`)
     }
   }
 
@@ -292,8 +361,11 @@ function computeFitDetails(destination, response) {
 
   let budgetFit = 1
   if (response.budget_ceiling) {
-    const range = destination.budgetMax - destination.budgetMin || 1
-    budgetFit = clamp01((response.budget_ceiling - destination.budgetMin) / range)
+    const cost = estimateTripCost(destination, response)
+    const excludesFlights = response.budget_includes_flights === 'excluding_flights'
+    const relevant = excludesFlights && cost.nonTransport ? cost.nonTransport : cost
+    const range = (relevant.high - relevant.low) || 1
+    budgetFit = clamp01((response.budget_ceiling - relevant.low) / range)
     const flex = response.budget_flexibility || 'strict'
     if (flex === 'flexible') budgetFit = Math.max(budgetFit, 0.65)
     else if (flex === 'somewhat_flexible') budgetFit = Math.max(budgetFit, 0.45)
@@ -453,6 +525,27 @@ function durationConflict(entries) {
   const lowestMax = Math.min(...fixed.map(({ response }) => response.max_days || response.min_days || Infinity))
   const highestMin = Math.max(...fixed.map(({ response }) => response.min_days || response.max_days || 0))
   return highestMin > lowestMax
+}
+
+// The group's initial budget search band (spec: "search around the lowest
+// feasible budget first, widen only if needed"). This is informational, not
+// a separate filtering pass — every person's own effective ceiling already
+// gates them independently in hardConstraintCheck, so a destination priced
+// within this band automatically clears everyone, and a pricier one only
+// survives if someone's stated flexibility actually covers the gap. That IS
+// the "try the tight band, relax only as needed" behavior; this just
+// narrates it. A "flexible" person imposes no ceiling at all, so they never
+// set the low or high end of the band.
+export function computeBudgetBand(participants, responsesByParticipant) {
+  const entries = completedResponses(participants, responsesByParticipant)
+  const nonFlexible = entries.filter(({ response }) => response.budget_ceiling && response.budget_flexibility !== 'flexible')
+  if (nonFlexible.length === 0) return null
+  const low = Math.min(...nonFlexible.map(({ response }) => response.budget_ceiling))
+  const effectiveCeilings = nonFlexible.map(({ response }) =>
+    response.budget_flexibility === 'somewhat_flexible' ? response.budget_ceiling * 1.15 : response.budget_ceiling
+  )
+  const high = Math.min(...effectiveCeilings)
+  return { low: Math.round(low), high: Math.round(Math.max(low, high)) }
 }
 
 // Independent status of each trip-level gate, all evaluated regardless of
@@ -659,11 +752,32 @@ function buildOptionSummary({ destination, fits, reds, score100, compromises, fa
   if (destination.aiEstimated) {
     practicalFit.push('AI-estimated destination — budget, travel time and vibe are a rough educated guess, not verified data')
   }
-  const ceilings = fits.map((f) => f.response.budget_ceiling).filter(Boolean)
-  if (ceilings.length) {
-    const lowest = Math.min(...ceilings)
-    practicalFit.push(`Typical cost ₹${destination.budgetMin.toLocaleString('en-IN')}–₹${destination.budgetMax.toLocaleString('en-IN')} per person, against the group's lowest cap of ₹${lowest.toLocaleString('en-IN')}`)
-  }
+  // Per-person ballpark cost vs. their own stated budget/flexibility — the
+  // explicit financial trade-off from spec section 8, never a silent
+  // assumption that someone will just spend more.
+  const budgetLines = fits
+    .map(({ participant, response }) => {
+      if (!response.budget_ceiling) return null
+      const cost = estimateTripCost(destination, response)
+      const excludesFlights = response.budget_includes_flights === 'excluding_flights'
+      const relevant = excludesFlights && cost.nonTransport ? cost.nonTransport : cost
+      const flex = response.budget_flexibility || 'strict'
+      const effectiveCeiling = flex === 'somewhat_flexible' ? response.budget_ceiling * 1.15 : response.budget_ceiling
+      const within = flex === 'flexible' || relevant.low <= effectiveCeiling
+      const costLabel = excludesFlights && cost.nonTransport
+        ? `non-flight cost ~₹${Math.round(relevant.low).toLocaleString('en-IN')}–₹${Math.round(relevant.high).toLocaleString('en-IN')}`
+        : `trip cost ~₹${Math.round(relevant.low).toLocaleString('en-IN')}–₹${Math.round(relevant.high).toLocaleString('en-IN')}`
+      const budgetLabel = flex === 'strict'
+        ? `their strict ₹${response.budget_ceiling.toLocaleString('en-IN')} budget`
+        : flex === 'somewhat_flexible'
+          ? `their ₹${response.budget_ceiling.toLocaleString('en-IN')} budget (stretched to ~₹${Math.round(effectiveCeiling).toLocaleString('en-IN')})`
+          : `their ₹${response.budget_ceiling.toLocaleString('en-IN')} budget — but they said they're flexible`
+      const verdict = within ? 'within range' : flex === 'flexible' ? 'over, but they opted in to that' : 'exceeds it'
+      const estimateNote = cost.isEstimate ? ' (rough estimate — no curated transport route for their origin)' : ''
+      return `${participant.name}: ${costLabel}/person vs. ${budgetLabel} — ${verdict}${estimateNote}`
+    })
+    .filter(Boolean)
+  practicalFit.push(...budgetLines)
   const travelEstimates = fits.map(({ participant, response }) => ({ name: participant.name, ...travelHoursForPerson(destination, response) }))
   const anyRealEstimate = travelEstimates.some((t) => !t.isEstimate)
   if (anyRealEstimate) {
