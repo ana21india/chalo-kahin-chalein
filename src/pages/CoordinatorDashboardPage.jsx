@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { Copy, Check, CheckCircle2, Clock, Circle } from 'lucide-react'
+import { Copy, Check, CheckCircle2, Clock, Circle, MessageCircle } from 'lucide-react'
 import { Screen, TopBar, Button, Card, Pill } from '../components/ui'
 import { getStoredParticipant } from '../lib/constants'
 import { getTrip, getParticipants, getResponses, subscribeToTrip } from '../lib/api'
@@ -49,6 +49,11 @@ export default function CoordinatorDashboardPage() {
     setTimeout(() => setCopied(false), 1500)
   }
 
+  function shareOnWhatsApp() {
+    const text = `Join our trip "${trip.name}" and fill in your preferences: ${inviteLink}`
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
   return (
     <Screen>
       <TopBar title={trip.name} subtitle={`Created by ${trip.coordinator_name}`} />
@@ -76,6 +81,13 @@ export default function CoordinatorDashboardPage() {
           <button onClick={copyLink} className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl bg-sunset-500 text-white text-sm font-semibold">
             <span className="truncate">{copied ? 'Copied!' : 'Copy invite link'}</span>
             {copied ? <Check size={16} /> : <Copy size={16} />}
+          </button>
+          <button
+            onClick={shareOnWhatsApp}
+            className="w-full mt-2 flex items-center justify-between px-4 py-3 rounded-2xl bg-emerald-500 text-white text-sm font-semibold"
+          >
+            <span className="truncate">Share via WhatsApp</span>
+            <MessageCircle size={16} />
           </button>
           <button
             onClick={() => navigate(`/trip/${tripId}/join`)}

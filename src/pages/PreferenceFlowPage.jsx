@@ -196,14 +196,13 @@ export default function PreferenceFlowPage() {
       <div className="flex-1 px-5 pt-5 pb-28 overflow-y-auto">
         {current === 'destinationPick' && (
           <div>
-            <PhaseHeader title="What kind of place do you want?" subtitle="Pick up to 3." />
+            <PhaseHeader title="What kind of place do you want?" subtitle="Pick as many as genuinely apply — more signal means better suggestions." />
             <ChipSelect
               options={TRIP_TYPE_OPTIONS}
               selected={form.destination_types}
               onChange={(v) => set({ destination_types: v })}
               noPreference={form.destination_no_pref}
               onNoPreferenceChange={(v) => set({ destination_no_pref: v, destination_types: v ? [] : form.destination_types })}
-              max={3}
               allowCustom={false}
             />
           </div>

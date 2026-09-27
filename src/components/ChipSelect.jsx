@@ -8,10 +8,11 @@ const funnyMaxHints = (max) => [
   `${max} max. We are trying to avoid another 1,200-message discussion.`,
 ]
 
-export default function ChipSelect({ options, selected, onChange, noPreference, onNoPreferenceChange, max = 3, allowCustom = true }) {
+export default function ChipSelect({ options, selected, onChange, noPreference, onNoPreferenceChange, max = null, allowCustom = true }) {
   const [customValue, setCustomValue] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
-  const atMax = selected.length >= max
+  const hasMax = typeof max === 'number'
+  const atMax = hasMax && selected.length >= max
 
   function toggle(option) {
     if (noPreference) return
@@ -43,7 +44,7 @@ export default function ChipSelect({ options, selected, onChange, noPreference, 
     <div>
       <div className="flex items-center justify-between mb-3 px-0.5">
         <span className="text-xs font-semibold text-neutral-400">
-          {noPreference ? 'No preference selected' : `${selected.length} / ${max} selected`}
+          {noPreference ? 'No preference selected' : hasMax ? `${selected.length} / ${max} selected` : `${selected.length} selected`}
         </span>
         {atMax && !noPreference && (
           <span className="text-xs text-sunset-500 font-medium">{funnyMaxHints(max)[options.length % 3]}</span>
