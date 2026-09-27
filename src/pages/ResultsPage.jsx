@@ -232,7 +232,12 @@ export default function ResultsPage() {
 }
 
 function ConsensusRow({ label, items }) {
-  const max = items[0]?.count || 1
+  // Bar width is share of the WHOLE group (count/total), not relative to
+  // whichever option got the most votes — a 1-of-2 split used to render as
+  // a full solid bar (same width as a 2-of-2 unanimous pick), which looked
+  // like unanimous agreement when it was really a 50/50 split.
+  const picked = items.filter((it) => it.count > 0)
+  const unpicked = items.filter((it) => it.count === 0 && it.option !== 'Not specified')
   return (
     <div className="mb-5 last:mb-0">
       <div className="text-xs font-bold text-neutral-400 uppercase tracking-wide mb-2">{label}</div>
@@ -240,14 +245,14 @@ function ConsensusRow({ label, items }) {
         <p className="text-sm text-neutral-400">No preferences expressed yet.</p>
       ) : (
         <div className="space-y-2">
-          {items.map((it) => (
+          {picked.map((it) => (
             <div key={it.option}>
               <div className="flex items-center justify-between text-sm mb-1">
                 <span className="text-neutral-800 font-medium">{it.option}</span>
                 <span className="text-neutral-400">{it.count}/{it.total}</span>
               </div>
               <div className="h-2 rounded-full bg-neutral-100 overflow-hidden">
-                <div className="h-full bg-sunset-500 rounded-full" style={{ width: `${(it.count / max) * 100}%` }} />
+                <div className="h-full bg-sunset-500 rounded-full" style={{ width: `${(it.count / it.total) * 100}%` }} />
               </div>
               {it.people && it.people.length > 0 && (
                 <div className="text-[11px] text-neutral-400 mt-1">
@@ -256,6 +261,10 @@ function ConsensusRow({ label, items }) {
               )}
             </div>
           ))}
+          {picked.length === 0 && <p className="text-sm text-neutral-400">Nobody picked any option yet.</p>}
+          {unpicked.length > 0 && (
+            <p className="text-[11px] text-neutral-300">Not picked: {unpicked.map((it) => it.option).join(', ')}</p>
+          )}
         </div>
       )}
     </div>

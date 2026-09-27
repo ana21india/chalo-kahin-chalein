@@ -151,7 +151,9 @@ Axis keys in "profile" and "highlights" must exactly match: ${PROFILE_AXES.join(
 export async function suggestDestinations({ topAxes, budgetMin, groupSize, durationMin, durationMax, excludeNames }, apiKey) {
   if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
 
-  const prompt = `A group of ${groupSize} travellers is planning a trip together. Their combined preferences: ${topAxes.length ? `they lean toward ${topAxes.join(', ')}` : 'no strong kind-of-trip preference expressed'}${budgetMin ? `, a budget around ₹${budgetMin} or below per person` : ''}${durationMin ? `, a trip of roughly ${durationMin}-${durationMax || durationMin} days` : ''}. Suggest exactly 3 real, specific destination names (a city or region, domestic India or international) that genuinely fit this combined profile well — not generic clichés unless they truly fit. Do NOT suggest any of these (already covered elsewhere): ${excludeNames.join(', ')}.
+  const prompt = `A group of ${groupSize} travellers is planning a trip together. Their combined preferences: ${topAxes.length ? `they lean toward ${topAxes.join(', ')}` : 'no strong kind-of-trip preference expressed'}${budgetMin ? `, a budget around ₹${budgetMin} or below per person` : ''}${durationMin ? `, a trip of roughly ${durationMin}-${durationMax || durationMin} days` : ''}. Suggest exactly 3 real, specific destination names (a city or region, domestic India or international) that genuinely fit this combined profile well.
+
+Prefer well-known, popular, well-connected destinations that most people would recognize and feel confident travelling to — this is an ordinary group trip, not a backpacking or offbeat-travel adventure. Only suggest a lesser-known place if it is clearly, specifically a better fit for the stated preferences than any well-known alternative. Do NOT suggest any of these (already covered elsewhere): ${excludeNames.join(', ')}.
 
 Return ONLY a JSON array of 3 destination name strings, nothing else, no markdown fences. Example: ["Name One", "Name Two", "Name Three"]`
 
@@ -162,7 +164,7 @@ Return ONLY a JSON array of 3 destination name strings, nothing else, no markdow
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
       }),
     }
   )
