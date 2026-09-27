@@ -52,14 +52,12 @@ export default function LandingPage() {
             <MapPin className="text-sunset-400" size={26} />
           </div>
           <h1 className="font-display text-4xl font-bold text-lagoon-800 leading-tight">
-            Lifelong memories,
-            <br />
             <span className="relative inline-block">
               <span className="absolute inset-x-0 bottom-1 h-3 bg-sunset-300 -z-10 rounded-sm" />
-              zero group chaos
+              Chalo Kahin Chalein
             </span>
           </h1>
-          <p className="text-neutral-500 mt-3 text-sm">Chalo Kahin Chalein — plan the trip, not the 1,200 messages.</p>
+          <p className="text-neutral-500 mt-3 text-sm">Lifelong memories, zero group chaos — plan the trip, not the 1,200 messages.</p>
         </div>
 
         <HeroIllustration />

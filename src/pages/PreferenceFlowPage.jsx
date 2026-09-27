@@ -14,6 +14,17 @@ import { getTrip, getResponse, getParticipant, upsertResponse } from '../lib/api
 const STEPS = ['destinationPick', 'budget', 'datesAndDuration', 'startingPoint', 'paceAndStay', 'dealbreakers', 'review']
 const today = new Date().toISOString().slice(0, 10)
 
+// A narrow date window (even a single day) gives the group almost no room
+// to actually align — this was the exact root cause of a real "no dates
+// overlap" failure traced earlier (one person's window missed everyone
+// else's by just 2 days). Requiring a wider window up front means more
+// slack for everyone else's flexibility to actually reach it.
+const MIN_DATE_SPAN_DAYS = 15
+function dateSpanDays(start, end) {
+  if (!start || !end) return null
+  return Math.round((new Date(end) - new Date(start)) / (24 * 60 * 60 * 1000)) + 1
+}
+
 const INTEGER_FIELDS = ['budget_ceiling', 'min_days', 'max_days']
 const DATE_FIELDS = ['date_range_start', 'date_range_end']
 
@@ -60,6 +71,7 @@ export default function PreferenceFlowPage() {
   const [form, setForm] = useState(emptyForm)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [coordinatorResponse, setCoordinatorResponse] = useState(null)
 
   useEffect(() => {
     if (!participant?.id) {
@@ -77,6 +89,13 @@ export default function PreferenceFlowPage() {
     ]).then(([t, r, targetParticipant]) => {
       setTrip(t)
       if (targetParticipant) setTargetName(targetParticipant.name)
+      // Show the coordinator's own dates as a reference point so whoever's
+      // filling this in can try to actually align with them — but only to
+      // someone who isn't the coordinator themselves (they'd just be
+      // shown their own answer back).
+      if (t.coordinator_id && t.coordinator_id !== targetId) {
+        getResponse(t.coordinator_id).then((cr) => { if (cr) setCoordinatorResponse(cr) })
+      }
       if (r) {
         if (r.status === 'completed' && !editingOther && !participant.isCoordinator) {
           navigate(`/trip/${tripId}/status`, { replace: true })
@@ -147,11 +166,18 @@ export default function PreferenceFlowPage() {
   // neutral "doesn't matter" the way it is for softer fields, so they're
   // required outright rather than needing a "no preference" toggle.
   const hasDates = Boolean(form.date_range_start && form.date_range_end)
+  const dateSpan = dateSpanDays(form.date_range_start, form.date_range_end)
+  const dateSpanOk = !hasDates || dateSpan >= MIN_DATE_SPAN_DAYS
   const hasDayRange = Boolean(form.min_days && form.max_days)
   const proceedRules = {
     destinationPick: { ok: form.destination_no_pref || form.destination_types.length > 0, hint: 'Pick at least one, or tell us you have no preference, to continue.' },
     budget: { ok: Boolean(form.budget_ceiling) && Number(form.budget_ceiling) > 0, hint: 'Enter your maximum budget to continue — this is a hard constraint the engine relies on.' },
-    datesAndDuration: { ok: hasDates || hasDayRange, hint: 'Enter either specific dates or a day range you can spare, to continue.' },
+    datesAndDuration: {
+      ok: (hasDates && dateSpanOk) || hasDayRange,
+      hint: hasDates && !dateSpanOk
+        ? `Your date range is only ${dateSpan} day${dateSpan === 1 ? '' : 's'} — widen it to at least ${MIN_DATE_SPAN_DAYS} days so the group has room to align, or use a day-range instead.`
+        : 'Enter either specific dates (at least 15 days apart) or a day range you can spare, to continue.',
+    },
     startingPoint: { ok: Boolean(form.starting_city.trim()), hint: 'Enter your starting city to continue — the engine needs it to check real travel times.' },
     dealbreakers: { ok: form.no_dealbreakers || form.dealbreakers.length > 0, hint: 'Pick at least one, or tell us you have no dealbreakers, to continue.' },
   }
@@ -183,7 +209,7 @@ export default function PreferenceFlowPage() {
           </div>
         )}
         {current === 'budget' && <BudgetPhase form={form} set={set} />}
-        {current === 'datesAndDuration' && <DatesPhase form={form} set={set} />}
+        {current === 'datesAndDuration' && <DatesPhase form={form} set={set} coordinatorResponse={coordinatorResponse} />}
         {current === 'startingPoint' && <StartingPointPhase form={form} set={set} />}
         {current === 'paceAndStay' && <PaceAndStayPhase form={form} set={set} />}
         {current === 'dealbreakers' && <DealbreakersPhase form={form} set={set} />}
@@ -294,8 +320,10 @@ function BudgetPhase({ form, set }) {
   )
 }
 
-function DatesPhase({ form, set }) {
+function DatesPhase({ form, set, coordinatorResponse }) {
   const minEnd = form.date_range_start > today ? form.date_range_start : today
+  const span = dateSpanDays(form.date_range_start, form.date_range_end)
+  const spanTooNarrow = span != null && span < MIN_DATE_SPAN_DAYS
 
   function setStart(v) {
     const clamped = v && v < today ? today : v
@@ -307,15 +335,31 @@ function DatesPhase({ form, set }) {
     set({ date_range_end: v && v < minEnd ? minEnd : v })
   }
 
+  const coordinatorDateLabel = coordinatorResponse?.date_range_start && coordinatorResponse?.date_range_end
+    ? `${coordinatorResponse.date_range_start} to ${coordinatorResponse.date_range_end}`
+    : coordinatorResponse?.min_days && coordinatorResponse?.max_days
+      ? `${coordinatorResponse.min_days}-${coordinatorResponse.max_days} days (no specific dates given)`
+      : null
+
   return (
     <div className="space-y-6">
       <PhaseHeader title="When can everyone go, and for how long?" subtitle="Dates or weekends that work, and how many days you can spare." />
+      {coordinatorDateLabel && (
+        <div className="px-3.5 py-2.5 rounded-xl bg-lagoon-50 border border-lagoon-200 text-xs text-lagoon-800">
+          <span className="font-bold">Your coordinator suggested:</span> {coordinatorDateLabel} — try to pick something that overlaps.
+        </div>
+      )}
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2">Dates that work for you</div>
         <div className="flex gap-2">
           <TextInput type="date" value={form.date_range_start} onChange={setStart} min={today} />
           <TextInput type="date" value={form.date_range_end} onChange={setEnd} min={minEnd} />
         </div>
+        {spanTooNarrow && (
+          <p className="text-xs text-rose-600 mt-1.5">
+            That's only {span} day{span === 1 ? '' : 's'} — widen it to at least {MIN_DATE_SPAN_DAYS} days so the group has room to find a date that works for everyone.
+          </p>
+        )}
       </div>
       <div>
         <div className="text-sm font-bold text-neutral-800 mb-2.5">Flexibility</div>
