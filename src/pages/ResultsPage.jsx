@@ -7,7 +7,7 @@ import { getTrip, getParticipants, getResponses, getVotes, castVote, subscribeTo
 import { completionCounts, fieldConsensus, computeConflicts, generateOptions, tripLevelChecks, computeBudgetBand } from '../lib/tripLogic'
 import { DESTINATIONS } from '../lib/destinations'
 import {
-  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS, TRAVEL_MODES,
+  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS, TRIP_TYPE_OPTIONS,
   TRAVEL_TIME_FIRMNESS_OPTIONS, BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS,
   DEALBREAKERS, BUDGET_SCOPE_OPTIONS, DATE_FLEXIBILITY_OPTIONS,
 } from '../lib/constants'
@@ -278,7 +278,6 @@ function ConsensusTab({ participants, responses }) {
     allOptions: optionValues(TRIP_TYPE_OPTIONS), isMulti: true, noPrefField: 'destination_no_pref',
   })
   const startingPoints = fieldConsensus(participants, responses, 'starting_city')
-  const travelMode = fieldConsensus(participants, responses, 'travel_mode', { allOptions: optionValues(TRAVEL_MODES) })
   const travelTime = fieldConsensus(participants, responses, 'travel_time_max', {
     labelMap: labelMapFrom(TRAVEL_TIME_OPTIONS), allOptions: optionValues(TRAVEL_TIME_OPTIONS),
     detailField: 'travel_time_firmness', detailLabelMap: labelMapFrom(TRAVEL_TIME_FIRMNESS_OPTIONS),
@@ -302,8 +301,6 @@ function ConsensusTab({ participants, responses }) {
         <ConsensusRow label="Kind of trip" items={places} />
         <div className="h-px bg-neutral-100 my-4" />
         <ConsensusRow label="Starting point" items={startingPoints} />
-        <div className="h-px bg-neutral-100 my-4" />
-        <ConsensusRow label="Mode of transport" items={travelMode} />
         <div className="h-px bg-neutral-100 my-4" />
         <ConsensusRow label="Travel time" items={travelTime} />
         <div className="h-px bg-neutral-100 my-4" />

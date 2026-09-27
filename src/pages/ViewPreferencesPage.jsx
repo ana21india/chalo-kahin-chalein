@@ -100,7 +100,7 @@ export default function ViewPreferencesPage() {
         </ViewCard>
 
         <ViewCard title="Starting point">
-          {response.starting_city || 'City not set'} · {response.travel_mode || 'Anything'} · {travelTimeLabel}
+          {response.starting_city || 'City not set'} · {travelTimeLabel}
           {response.travel_time_max && response.travel_time_max !== 'no_limit' ? ` (${travelTimeFirmnessLabel})` : ''}
         </ViewCard>
 

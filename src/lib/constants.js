@@ -78,8 +78,6 @@ export const ROOM_OPTIONS = [
   { value: 'separate', label: 'Separate rooms' },
 ]
 
-export const TRAVEL_MODES = ['Flight', 'Train', 'Road', 'Anything']
-
 export const TRAVEL_TIME_OPTIONS = [
   { value: 'under_3h', label: 'Under 3 hours' },
   { value: 'under_6h', label: 'Under 6 hours' },

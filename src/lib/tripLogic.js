@@ -188,29 +188,26 @@ function clamp01(n) {
   return Math.max(0, Math.min(1, n))
 }
 
-// Best real travel-time estimate for one person to one destination, given
-// their requested mode(s). Falls back to the destination's generic
-// (Mumbai/Delhi-hub-ish) number when we have no curated route for their
-// city — `isEstimate: true` flags that fallback so callers can be honest
-// about it instead of presenting a guess as a measured number.
+// Best real travel-time estimate for one person to one destination, taking
+// the fastest of whatever modes actually serve the destination (no mode
+// preference is collected from travellers — see the product decision to
+// drop it, it was adding complexity without meaningfully changing what
+// people actually cared about, which is the total time). Falls back to the
+// destination's generic (Mumbai/Delhi-hub-ish) number when we have no
+// curated route for their city — `isEstimate: true` flags that fallback so
+// callers can be honest about it instead of presenting a guess as a
+// measured number.
 function travelHoursForPerson(destination, response) {
-  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
-  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
-  if (availableModes.length === 0) {
-    // The requested mode doesn't reach this destination at all — treat it
-    // as a poor (not feasible-but-slow) fit rather than the fallback time.
-    return { hours: destination.travelTimeHours * 2, isEstimate: true }
-  }
   if (response.starting_city) {
-    const estimates = availableModes
+    const estimates = destination.travelModes
       .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
       .filter((h) => h != null)
     if (estimates.length > 0) return { hours: Math.min(...estimates), isEstimate: false }
     // No curated route. For an AI-suggested destination, a real road
     // distance/time (see api/_lib/geo.js) is a far more honest number than
-    // Gemini's own guess, even used as a same-mode-agnostic floor — still
+    // Gemini's own guess, even used as a mode-agnostic floor — still
     // flagged as an estimate since it's a road-distance proxy, not a
-    // verified schedule for the traveller's actual chosen mode.
+    // verified schedule.
     const real = destination.realDistances?.[response.starting_city]
     if (typeof real === 'number') return { hours: real, isEstimate: true, realProxy: true }
   }
@@ -265,14 +262,15 @@ function tripDurationDays(destination, response) {
   return (destination.recommendedDuration.min + destination.recommendedDuration.max) / 2
 }
 
-// Real, per-person ballpark trip cost — transport (mode/origin-aware, from
-// transportCosts.js) + accommodation/food/local/activities/mandatory (from
-// destination.costBreakdown), scaled to this person's own trip length and
-// respecting their exact requested mode. Never fabricates a number: if we
-// have no curated transport route for this origin/mode, or no cost
-// breakdown for this destination at all (e.g. an AI-estimated destination),
-// falls back to the destination's flat budgetMin/Max range — the same
-// graceful-uncertainty rule used throughout this file (see travelTimes.js).
+// Real, per-person ballpark trip cost — transport (origin-aware, cheapest
+// of whatever modes serve the destination, from transportCosts.js) +
+// accommodation/food/local/activities/mandatory (from
+// destination.costBreakdown), scaled to this person's own trip length.
+// Never fabricates a number: if we have no curated transport route for this
+// origin, or no cost breakdown for this destination at all (e.g. an
+// AI-estimated destination), falls back to the destination's flat
+// budgetMin/Max range — the same graceful-uncertainty rule used throughout
+// this file (see travelTimes.js).
 export function estimateTripCost(destination, response) {
   const cb = destination.costBreakdown
   if (!cb) {
@@ -287,11 +285,9 @@ export function estimateTripCost(destination, response) {
     high: cb.stayPerNight[1] * nights + cb.foodPerDay[1] * days + cb.localPerDay[1] * days + cb.activities[1] + cb.mandatory[1],
   }
 
-  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
-  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
   let transport = null
-  if (response.starting_city && availableModes.length > 0) {
-    const estimates = availableModes
+  if (response.starting_city) {
+    const estimates = destination.travelModes
       .map((m) => estimateTransportCost(destination.name, response.starting_city, m))
       .filter(Boolean)
     if (estimates.length > 0) transport = estimates.reduce((best, cur) => (cur.low < best.low ? cur : best))
@@ -412,12 +408,7 @@ function computeFitDetails(destination, response) {
     stayFit = destination.suitableStayTypes.includes(response.stay_type) ? 1 : 0.4
   }
 
-  let travelModeFit = 1
-  if (response.travel_mode && response.travel_mode !== 'Anything') {
-    travelModeFit = destination.travelModes.includes(response.travel_mode) ? 1 : 0.4
-  }
-
-  return { preferenceFit, budgetFit, travelFit, durationFit, paceFit, stayFit, travelModeFit }
+  return { preferenceFit, budgetFit, travelFit, durationFit, paceFit, stayFit }
 }
 
 // Full per-person evaluation, reduced to the {level, reasons} shape the
@@ -452,7 +443,7 @@ export function fitForDestination(destination, response) {
 
   if (reasons.length === 0) reasons.push({ ok: 'warn', text: 'No strong signal either way' })
 
-  const avgSoft = (details.preferenceFit + details.budgetFit + details.travelFit + details.durationFit + details.paceFit + details.stayFit + details.travelModeFit) / 7
+  const avgSoft = (details.preferenceFit + details.budgetFit + details.travelFit + details.durationFit + details.paceFit + details.stayFit) / 6
   const level = hc.blocked ? 'red' : avgSoft >= 0.75 ? 'green' : 'yellow'
 
   return { level, score: avgSoft * 80, reasons, blocked: hc.blocked, details }
@@ -515,12 +506,11 @@ function scoreDestination(destination, entries, personalBest) {
   const rawScore =
     avgPreferenceFit * 30 +
     groupCompatibility * 25 +
-    avg('budgetFit') * 12 +
-    avg('travelFit') * 8 +
+    avg('budgetFit') * 13 +
+    avg('travelFit') * 12 +
     avg('durationFit') * 5 +
     avg('paceFit') * 5 +
-    avg('stayFit') * 5 +
-    avg('travelModeFit') * 5 -
+    avg('stayFit') * 5 -
     fairnessGap * 15
   const score100 = Math.max(0, Math.min(100, rawScore))
 
@@ -577,24 +567,12 @@ export function tripLevelChecks(participants, responsesByParticipant) {
 
 // Layer 2 — destination-level travel feasibility. A hard travel-time limit
 // eliminates a DESTINATION from the candidate pool; it never eliminates the
-// trip. Respects the traveller's chosen mode exactly (a flight time can
-// never rescue a "Train, hard limit" answer), compares against real
-// mode/origin-aware durations where we have them, and only ever blocks on
-// "preference"-firmness data we actually have — never on a hallucinated
-// number. See travelTimes.js.
+// trip. Takes the fastest of whatever modes actually serve the destination
+// (no mode preference is collected — see the product decision to drop it),
+// compares against real origin-aware durations where we have them, and
+// only ever blocks on "preference"-firmness data we actually have — never
+// on a hallucinated number. See travelTimes.js.
 function destinationTravelFeasible(destination, response) {
-  const requestedModes = response.travel_mode && response.travel_mode !== 'Anything' ? [response.travel_mode] : destination.travelModes
-
-  // The requested mode doesn't serve this destination at all (e.g. Train to
-  // Coorg, which is Road-only) — that's a fact about the destination, not a
-  // matter of degree, so it hard-blocks regardless of how firm the time
-  // limit is (or whether one was even set) — "preference" firmness only
-  // softens the TIME comparison below, never mode-exactness.
-  const availableModes = requestedModes.filter((m) => destination.travelModes.includes(m))
-  if (availableModes.length === 0) {
-    return { feasible: false, reason: `Not reachable by ${requestedModes.join('/')}` }
-  }
-
   if (!response.travel_time_max || response.travel_time_max === 'no_limit') return { feasible: true }
   if ((response.travel_time_firmness || 'preference') !== 'hard') return { feasible: true }
 
@@ -602,7 +580,7 @@ function destinationTravelFeasible(destination, response) {
 
   if (!response.starting_city) return { feasible: true }
 
-  const estimates = availableModes
+  const estimates = destination.travelModes
     .map((m) => estimateTravelHours(destination.name, response.starting_city, m))
     .filter((h) => h != null)
   if (estimates.length === 0) {
@@ -625,14 +603,14 @@ function destinationTravelFeasible(destination, response) {
       return { feasible: true }
     }
     if (destination.aiEstimated && regionForCity(response.starting_city) === 'north' && destination.travelTimeHours > maxHours) {
-      return { feasible: false, reason: `~${destination.travelTimeHours}h from North India by ${availableModes.join('/')} (rough AI estimate, unverified) — over the hard limit` }
+      return { feasible: false, reason: `~${destination.travelTimeHours}h from North India (rough AI estimate, unverified) — over the hard limit` }
     }
     return { feasible: true }
   }
 
   const best = Math.min(...estimates)
   if (best > maxHours) {
-    return { feasible: false, reason: `From ${response.starting_city}, the fastest option (${availableModes.join('/')}) is ~${Math.round(best)}h — over the hard limit` }
+    return { feasible: false, reason: `From ${response.starting_city}, the fastest option (${destination.travelModes.join('/')}) is ~${Math.round(best)}h — over the hard limit` }
   }
   return { feasible: true }
 }

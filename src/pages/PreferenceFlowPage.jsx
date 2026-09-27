@@ -5,7 +5,7 @@ import { Screen, TopBar, Button, Card, TextInput, ProgressDots } from '../compon
 import ChipSelect from '../components/ChipSelect'
 import {
   TRIP_TYPE_OPTIONS, DEALBREAKERS, BUDGET_SCOPE_OPTIONS,
-  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_MODES, TRAVEL_TIME_OPTIONS,
+  PACE_OPTIONS, STAY_OPTIONS, ROOM_OPTIONS, TRAVEL_TIME_OPTIONS,
   DATE_FLEXIBILITY_OPTIONS, MAJOR_CITIES, getStoredParticipant,
   BUDGET_FLEXIBILITY_OPTIONS, DAYS_FLEXIBILITY_OPTIONS, TRAVEL_TIME_FIRMNESS_OPTIONS,
 } from '../lib/constants'
@@ -40,7 +40,7 @@ const emptyForm = {
   destination_types: [], destination_no_pref: false,
   budget_ceiling: '', budget_includes_flights: 'whole_trip', budget_flexibility: 'strict',
   date_range_start: '', date_range_end: '', date_flexibility: 'flexible', min_days: '', max_days: '', days_flexibility: 'target',
-  starting_city: '', travel_mode: 'Anything', travel_time_max: 'no_limit', travel_time_firmness: 'preference',
+  starting_city: '', travel_time_max: 'no_limit', travel_time_firmness: 'preference',
   pace: '', stay_type: '', room_sharing: '',
   dealbreakers: [], no_dealbreakers: false,
 }
@@ -372,20 +372,6 @@ function StartingPointPhase({ form, set }) {
         />
       </div>
       <div>
-        <div className="text-sm font-bold text-neutral-800 mb-2.5">Preferred travel mode</div>
-        <div className="flex flex-wrap gap-2">
-          {TRAVEL_MODES.map((m) => (
-            <button
-              key={m}
-              onClick={() => set({ travel_mode: m })}
-              className={`px-4 py-2.5 rounded-full text-sm font-medium border ${form.travel_mode === m ? 'bg-lagoon-600 border-lagoon-600 text-white' : 'bg-white border-neutral-200 text-neutral-700'}`}
-            >
-              {m}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div>
         <div className="text-sm font-bold text-neutral-800 mb-2.5">Maximum travel time</div>
         <div className="flex flex-col gap-2">
           {TRAVEL_TIME_OPTIONS.map((opt) => (
@@ -549,7 +535,7 @@ function ReviewPhase({ form, onEdit }) {
         </ReviewCard>
 
         <ReviewCard title="Starting point" onEdit={() => onEdit(STEPS.indexOf('startingPoint'))}>
-          {form.starting_city || 'City not set'} · {form.travel_mode} · {TRAVEL_TIME_OPTIONS.find((o) => o.value === form.travel_time_max)?.label}
+          {form.starting_city || 'City not set'} · {TRAVEL_TIME_OPTIONS.find((o) => o.value === form.travel_time_max)?.label}
           {form.travel_time_max !== 'no_limit' ? ` (${travelTimeFirmnessLabel})` : ''}
         </ReviewCard>
 

@@ -61,7 +61,6 @@ CREATE TABLE IF NOT EXISTS responses (
   max_days INTEGER,
   days_flexibility TEXT DEFAULT 'target',
   starting_city TEXT,
-  travel_mode TEXT DEFAULT 'anything',
   travel_time_max TEXT DEFAULT 'no_limit',
   travel_time_firmness TEXT DEFAULT 'preference',
   pace TEXT,
