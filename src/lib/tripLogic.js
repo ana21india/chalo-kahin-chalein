@@ -217,18 +217,25 @@ function travelHoursForPerson(destination, response) {
   return { hours: destination.travelTimeHours, isEstimate: true }
 }
 
+// Only 'flexible' ever reaches this — 'very_flexible' is handled entirely
+// in personDateWindow (no padding at all, since it's treated as no
+// constraint), and anything else (including 'fixed') gets zero padding.
 function flexDays(flexibility) {
   switch (flexibility) {
     case 'flexible': return 3
-    case 'very_flexible': return 10
     default: return 0
   }
 }
 
 // A person's acceptable travel window, expanded by their stated flexibility.
-// Returns null if they didn't specify dates at all — someone who left dates
-// blank places no constraint on the group's common window.
+// Returns null if they place no constraint on the group's common window at
+// all — either because they left dates blank, or because they explicitly
+// said "Very flexible", which means "any date range works for me," not "my
+// dates, padded by 10 days." Their stated dates are still shown elsewhere
+// as a preference/reference point, but never used to narrow the group's
+// common window the way a real constraint would.
 function personDateWindow(response) {
+  if (response.date_flexibility === 'very_flexible') return null
   if (!response.date_range_start && !response.date_range_end) return null
   const start = response.date_range_start ? new Date(response.date_range_start) : new Date(response.date_range_end)
   const end = response.date_range_end ? new Date(response.date_range_end) : new Date(response.date_range_start)

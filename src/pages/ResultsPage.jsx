@@ -384,7 +384,11 @@ function BudgetAndDatesCard({ participants, responses }) {
             <div key={p.id} className="flex items-center justify-between text-sm">
               <span className="text-neutral-700">{p.name}</span>
               <span className="text-neutral-500 text-right">
-                {r.date_range_start && r.date_range_end ? `${r.date_range_start} to ${r.date_range_end} (${flexLabel})` : 'Flexible / not set'}
+                {r.date_range_start && r.date_range_end
+                  ? `${r.date_range_start} to ${r.date_range_end} (${flexLabel})`
+                  : r.date_range_start || r.date_range_end
+                    ? `${r.date_range_start || r.date_range_end} onward (${flexLabel})`
+                    : 'Not set'}
               </span>
             </div>
           )
