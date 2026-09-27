@@ -5,7 +5,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Baloo 2', 'ui-sans-serif', 'sans-serif'],
+        display: ['Montserrat', 'ui-sans-serif', 'sans-serif'],
       },
       colors: {
         cream: {
